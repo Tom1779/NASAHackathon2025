@@ -11,7 +11,7 @@ rizz_colors = ["#FF6B35", "#F7931E", "#FFD23F", "#06FFA5", "#4ECDC4", "#45B7D1"]
 
 def tung_tung_animation():
     """Peak brainrot: turtle goes absolutely feral"""
-    for _ in range(4):  # TUNG TUNG TUNG TUNG
+    for _ in range(4):  # TUNG TUNG TUNG TUNG SAHUR
         sigma.color(random.choice(rizz_colors))
         sigma.circle(30, 90)
         sigma.right(90)
