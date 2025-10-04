@@ -15,7 +15,7 @@
           </label>
           <InputText
             v-model="searchQuery"
-            placeholder="Type asteroid name or ID..."
+            :placeholder="selectedAsteroid ? `Selected: ${selectedAsteroid.name}` : 'Type asteroid name or ID...'"
             class="w-full"
             @input="onSearchInput"
             @focus="isSearchFocused = true"
@@ -351,6 +351,13 @@ const selectAsteroid = (asteroid: Asteroid) => {
   filters.value.sizeRange = null
   filters.value.sortBy = 'name'
   currentPage.value = 1
+  isSearchFocused.value = false
+  
+  // Scroll to top of page
+  window.scrollTo({
+    top: 0,
+    behavior: 'smooth'
+  })
 }
 
 const handleAnalyze = () => {
