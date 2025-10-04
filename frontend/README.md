@@ -2,55 +2,140 @@
 
 A Vue 3 + PrimeVue application for the NASA Space Apps Challenge 2025 - Meteor Madness mission.
 
-## Overview
+## 🚀 Overview
 
-This frontend application provides an interactive interface for exploring asteroids and estimating their worth based on chemical composition. The app features:
+This frontend application provides an interactive interface for exploring asteroids and estimating their worth based on chemical composition. Built with modern web technologies and optimized for performance.
 
-- **Asteroid Selection**: Browse and select from NASA's Near Earth Object database
-- **3D Visualization Space**: Reserved area for Three.js asteroid simulation (integration pending)
-- **Detailed Information**: Comprehensive asteroid data including size estimates, orbital data, and hazard assessment
-- **Worth Estimation**: Placeholder for chemical composition analysis and value calculation
+### ✨ Key Features
 
-## Project Structure
+- **🔍 Asteroid Selection**: Interactive dropdown with NASA's Near Earth Object data
+- **🌌 3D Visualization Space**: Ready for Three.js asteroid simulation integration
+- **📊 Detailed Analytics**: Comprehensive asteroid data including size estimates and orbital information
+- **💎 Worth Estimation**: Chemical composition analysis and value calculation interface
+- **📱 Responsive Design**: Optimized for desktop, tablet, and mobile devices
+- **🎨 Space Theme**: Dark UI with purple accents and performance-optimized styling
+
+## 🏗️ Architecture
+
+### Component Structure
 
 ```
 src/
-├── components/           # Reusable Vue components (future)
+├── components/           # Modular Vue components
+│   ├── AppHeader.vue        # Application header with branding
+│   ├── AsteroidSelector.vue # Asteroid selection and quick stats
+│   ├── AsteroidSimulation.vue # 3D visualization container
+│   ├── AsteroidDetails.vue  # Basic info and size estimates
+│   ├── CloseApproachData.vue # Orbital data with responsive table
+│   └── WorthEstimation.vue  # Chemical analysis placeholder
 ├── composables/          # Vue composition functions
-│   └── useAsteroids.ts  # Asteroid data management
-├── types/               # TypeScript type definitions
-│   └── asteroid.ts      # Asteroid-related types
-├── assets/             # Static assets and styles
-└── App.vue             # Main application component
+│   └── useAsteroids.ts      # Asteroid data management and API calls
+├── types/               # TypeScript definitions
+│   └── asteroid.ts          # NASA API compatible types
+├── assets/              # Global styles and utilities
+│   └── main.css            # Custom CSS with PrimeVue theme overrides
+└── App.vue              # Main application orchestrator
 ```
 
-## Features
+### 🔧 Technology Stack
 
-### Current Implementation
+- **Vue 3** with Composition API and `<script setup>`
+- **TypeScript** with strict type checking enabled
+- **PrimeVue 4** - Professional UI component library
+- **PrimeIcons** - Comprehensive icon set
+- **Vite** - Lightning-fast build tool
+- **ESLint + Prettier** - Code quality and formatting
 
-- Responsive design with space-themed dark UI
-- Asteroid selection dropdown with search capability
-- Real-time asteroid information display
-- Size estimates in multiple units (km, m, miles, feet)
-- Close approach data visualization
-- Hazard assessment indicators
+## 🎯 Team Integration Points
 
-### Integration Points for Team Members
+### For 3D Simulation Developer
 
-- **3D Simulation**: Component ready for Three.js integration in the designated simulation area
-- **API Integration**: `useAsteroids.ts` composable ready to replace mock data with actual NASA API calls
-- **Worth Calculation**: Placeholder section ready for chemical composition analysis integration
+- **Component**: `AsteroidSimulation.vue`
+- **Props**: Receives `selectedAsteroid` object with all NASA data
+- **Container**: Pre-styled 3D visualization area ready for Three.js integration
 
-## Technology Stack
+### For Backend/API Developer
 
-- **Vue 3** - Progressive JavaScript framework
-- **PrimeVue** - UI component library with space theme customization
-- **TypeScript** - Type-safe JavaScript
-- **Vite** - Fast build tool and development server
+- **Composable**: `useAsteroids.ts`
+- **Mock Data**: Replace with actual NASA API calls
+- **Types**: Use `Asteroid` interface for type safety
 
-## Data Structure
+### For Chemical Analysis Integration
 
-The app expects asteroid data in NASA's NEO API format:
+- **Component**: `WorthEstimation.vue`
+- **Enhancement**: Add composition data to `Asteroid` type
+- **UI**: Ready-to-use card layout for displaying calculated worth
+
+## 🚀 Performance Optimizations
+
+- **No Backdrop Blur**: Removed `backdrop-filter: blur()` for better Chrome performance
+- **Optimized Backgrounds**: Solid transparency instead of GPU-intensive effects
+- **Responsive Tables**: Mobile-optimized with smaller fonts on small screens
+- **Component Splitting**: Modular architecture for better bundle optimization
+
+## 📋 Data Structure
+
+The application uses NASA's Near Earth Object API format:
+
+```typescript
+interface Asteroid {
+  id: string
+  name: string
+  absolute_magnitude_h: number
+  estimated_diameter: {
+    kilometers: { estimated_diameter_min: number; estimated_diameter_max: number }
+    meters: { estimated_diameter_min: number; estimated_diameter_max: number }
+    // ... other units
+  }
+  is_potentially_hazardous_asteroid: boolean
+  close_approach_data: Array<{
+    close_approach_date: string
+    relative_velocity: { kilometers_per_hour: string }
+    miss_distance: { kilometers: string }
+    orbiting_body: string
+  }>
+  // ... additional NASA API fields
+}
+```
+
+## 🛠️ Development Setup
+
+### Prerequisites
+
+- **Node.js** 20.19.0+ or 22.12.0+
+- **pnpm** (recommended) or npm
+
+### Quick Start
+
+```bash
+# Clone the repository
+git clone <repository-url>
+cd frontend
+
+# Install dependencies
+pnpm install
+
+# Start development server
+pnpm dev
+
+# Open http://localhost:5173
+```
+
+### Development Commands
+
+```bash
+# Type checking
+pnpm type-check
+
+# Linting
+pnpm lint
+
+# Build for production
+pnpm build
+
+# Preview production build
+pnpm preview
+```
 
 ## Recommended IDE Setup
 
