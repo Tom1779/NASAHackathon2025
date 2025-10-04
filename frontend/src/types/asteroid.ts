@@ -70,3 +70,41 @@ export interface AsteroidComposition {
   }
   estimated_value_usd?: number
 }
+
+export interface OrbitalData {
+  // Semi-major axis (AU)
+  a: number
+  // Eccentricity
+  e: number
+  // Inclination (degrees)
+  i: number
+  // Longitude of ascending node (degrees)
+  om: number
+  // Argument of perihelion (degrees)
+  w: number
+  // Mean anomaly (degrees)
+  ma: number
+  // Epoch (Julian Date)
+  epoch?: number
+  // Orbital period (days)
+  period?: number
+}
+
+export interface SbdbData {
+  object: {
+    fullname: string
+    des: string
+    orbit_id: string
+    [key: string]: unknown
+  }
+  orbit?: {
+    elements?: Array<{ name: string; value: string }>
+    element_labels?: string[]
+    element_values?: string[]
+    epoch?: string
+    [key: string]: unknown
+  }
+  phys_par?: {
+    [key: string]: unknown
+  }
+}
