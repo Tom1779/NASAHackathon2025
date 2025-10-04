@@ -18,6 +18,8 @@
             placeholder="Type asteroid name or ID..."
             class="w-full"
             @input="onSearchInput"
+            @focus="isSearchFocused = true"
+            @blur="onSearchBlur"
           />
         </div>
 
@@ -60,7 +62,7 @@
         </div>
 
         <!-- Search Results -->
-        <div v-if="searchQuery || hasFilters" class="max-h-64 overflow-y-auto border border-purple-500/30 rounded-lg">
+        <div v-if="isSearchFocused || searchQuery || hasFilters" class="max-h-64 overflow-y-auto border border-purple-500/30 rounded-lg relative z-10">
           <div v-if="loadingSearch" class="p-4 text-center text-purple-300">
             <i class="pi pi-spin pi-spinner mr-2"></i>
             Searching...
@@ -72,9 +74,10 @@
             <div
               v-for="asteroid in paginatedResults"
               :key="asteroid.id"
-              class="p-3 hover:bg-purple-900/30 cursor-pointer border-b border-purple-500/10 last:border-b-0"
+              class="p-3 hover:bg-purple-900/30 hover:scale-[1.02] transition-all duration-200 cursor-pointer border-b border-purple-500/10 last:border-b-0"
               @click="selectAsteroid(asteroid)"
               :class="{ 'bg-purple-900/50': selectedAsteroid?.id === asteroid.id }"
+              style="cursor: pointer;"
             >
               <div class="flex items-center justify-between">
                 <div class="flex items-center gap-2">
@@ -121,7 +124,7 @@
         </div>
 
         <!-- Quick Access / Recent Selections -->
-        <div v-if="!searchQuery && !hasFilters">
+        <div v-if="!isSearchFocused && !searchQuery && !hasFilters">
           <div class="text-sm text-purple-300 mb-2">Quick Access:</div>
           <div class="grid grid-cols-2 gap-2">
             <Button
@@ -209,6 +212,7 @@ const emit = defineEmits<Emits>()
 
 // Search and filter state
 const searchQuery = ref('')
+const isSearchFocused = ref(false)
 const loadingSearch = ref(false)
 const currentPage = ref(1)
 const itemsPerPage = 20
@@ -328,12 +332,25 @@ const onSearchInput = async () => {
   }, 300)
 }
 
+const onSearchBlur = () => {
+  // Delay hiding the results to allow clicks on them
+  setTimeout(() => {
+    isSearchFocused.value = false
+  }, 150)
+}
+
 const applyFilters = () => {
   currentPage.value = 1
 }
 
 const selectAsteroid = (asteroid: Asteroid) => {
   emit('update:selectedAsteroid', asteroid)
+  // Reset search and filters after selection
+  searchQuery.value = ''
+  filters.value.hazardous = null
+  filters.value.sizeRange = null
+  filters.value.sortBy = 'name'
+  currentPage.value = 1
 }
 
 const handleAnalyze = () => {
