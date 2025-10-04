@@ -214,12 +214,11 @@ export class AsteroidScene {
     }
 
     // Create asteroid mesh
-    const size = Math.max(1, Math.min(diameter / 100, 5)); // Scale based on diameter
+    // Increased size multiplier for better visibility
+    const size = Math.max(5, Math.min(diameter / 20, 15)); // Scale based on diameter (5-15 units)
     const asteroidGeometry = new THREE.SphereGeometry(size, 16, 16);
-    const asteroidMaterial = new THREE.MeshStandardMaterial({
-      color: 0xaaaaaa,
-      roughness: 0.9,
-      metalness: 0.3
+    const asteroidMaterial = new THREE.MeshBasicMaterial({
+      color: 0xffffff // White for high visibility, unaffected by lighting
     });
     this.asteroid = new THREE.Mesh(asteroidGeometry, asteroidMaterial);
 
