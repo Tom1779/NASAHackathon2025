@@ -139,19 +139,112 @@ export function useAsteroids() {
     },
   ]
 
+  // Function to generate large mock dataset
+  const generateLargeMockDataset = (): Asteroid[] => {
+    const baseNames = [
+      'Apophis', 'Bennu', 'Ryugu', 'Eros', 'Vesta', 'Ceres', 'Pallas', 'Juno',
+      'Hygiea', 'Psyche', 'Lutetia', 'Mathilde', 'Gaspra', 'Ida', 'Dactyl',
+      'Itokawa', 'Steins', 'Annefrank', 'Braille', 'Tempel', 'Hartley',
+      'Wild', 'Borrelly', 'Halley', 'Encke', 'Giacobini', 'Grigg', 'Holmes',
+      'Machholz', 'McNaught', 'NEOWISE', 'Hale-Bopp', 'Hyakutake', 'Levy',
+      'Shoemaker', 'LINEAR', 'NEAT', 'Catalina', 'Spacewatch', 'LONEOS'
+    ]
+    
+    const suffixes = [
+      'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M',
+      'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z',
+      '1', '2', '3', '4', '5', '6', '7', '8', '9', '0'
+    ]
+
+    const yearCodes = ['2020', '2021', '2022', '2023', '2024', '2025']
+    const monthCodes = ['AA', 'AB', 'AC', 'AD', 'AE', 'AF', 'AG', 'AH', 'AI', 'AJ', 'AK', 'AL']
+
+    const mockDataset: Asteroid[] = []
+    
+    // Generate 5000 asteroids for testing
+    for (let i = 0; i < 5000; i++) {
+      const baseName = baseNames[Math.floor(Math.random() * baseNames.length)]
+      const suffix = suffixes[Math.floor(Math.random() * suffixes.length)]
+      const year = yearCodes[Math.floor(Math.random() * yearCodes.length)]
+      const month = monthCodes[Math.floor(Math.random() * monthCodes.length)]
+      const number = Math.floor(Math.random() * 999) + 1
+      
+      const id = `${1000000 + i}`
+      const name = `${number} ${baseName} (${year} ${month}${suffix})`
+      const magnitude = Math.random() * 30 + 10 // 10-40 range
+      const isHazardous = Math.random() < 0.15 // 15% hazardous
+      const diameter = Math.pow(10, (6.259 - 0.4 * magnitude)) // Approximate formula
+      
+      const asteroid: Asteroid = {
+        links: {
+          self: `http://api.nasa.gov/neo/rest/v1/neo/${id}?api_key=DEMO_KEY`,
+        },
+        id: id,
+        neo_reference_id: id,
+        name: name,
+        nasa_jpl_url: `https://ssd.jpl.nasa.gov/tools/sbdb_lookup.html#/?sstr=${id}`,
+        absolute_magnitude_h: Math.round(magnitude * 100) / 100,
+        estimated_diameter: {
+          kilometers: {
+            estimated_diameter_min: diameter * 0.8,
+            estimated_diameter_max: diameter * 1.2,
+          },
+          meters: {
+            estimated_diameter_min: diameter * 800,
+            estimated_diameter_max: diameter * 1200,
+          },
+          miles: {
+            estimated_diameter_min: diameter * 0.497,
+            estimated_diameter_max: diameter * 0.746,
+          },
+          feet: {
+            estimated_diameter_min: diameter * 2624,
+            estimated_diameter_max: diameter * 3937,
+          },
+        },
+        is_potentially_hazardous_asteroid: isHazardous,
+        close_approach_data: [
+          {
+            close_approach_date: `${2025 + Math.floor(Math.random() * 5)}-${String(Math.floor(Math.random() * 12) + 1).padStart(2, '0')}-${String(Math.floor(Math.random() * 28) + 1).padStart(2, '0')}`,
+            close_approach_date_full: `${2025 + Math.floor(Math.random() * 5)}-Jan-01 12:00`,
+            epoch_date_close_approach: Date.now() + Math.random() * 157788000000, // Random future date
+            relative_velocity: {
+              kilometers_per_second: (Math.random() * 30 + 5).toFixed(2),
+              kilometers_per_hour: (Math.random() * 108000 + 18000).toFixed(2),
+              miles_per_hour: (Math.random() * 67000 + 11000).toFixed(2),
+            },
+            miss_distance: {
+              astronomical: (Math.random() * 2 + 0.1).toFixed(8),
+              lunar: (Math.random() * 800 + 40).toFixed(8),
+              kilometers: (Math.random() * 300000000 + 15000000).toFixed(2),
+              miles: (Math.random() * 186000000 + 9300000).toFixed(2),
+            },
+            orbiting_body: 'Earth',
+          },
+        ],
+        is_sentry_object: Math.random() < 0.02, // 2% sentry objects
+      }
+      
+      mockDataset.push(asteroid)
+    }
+    
+    // Add the original mock asteroids too
+    return [...mockAsteroids, ...mockDataset]
+  }
+
   const fetchAsteroids = async () => {
     loading.value = true
     error.value = null
 
     try {
-      // TODO: Replace with actual NASA API call
-      // const response = await fetch(`https://api.nasa.gov/neo/rest/v1/neo/browse?api_key=${API_KEY}`)
+      // Uncomment this when you have a real API endpoint
+      // const response = await fetch('/api/asteroids')
       // const data = await response.json()
       // asteroids.value = data.near_earth_objects || []
 
-      // For now, use mock data with simulated delay
-      await new Promise((resolve) => setTimeout(resolve, 1000))
-      asteroids.value = mockAsteroids
+      // For now, use large mock dataset with simulated delay
+      await new Promise((resolve) => setTimeout(resolve, 1500))
+      asteroids.value = generateLargeMockDataset()
     } catch (err) {
       error.value = err instanceof Error ? err.message : 'Failed to fetch asteroids'
       console.error('Error fetching asteroids:', err)
