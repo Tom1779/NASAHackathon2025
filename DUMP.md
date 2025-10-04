@@ -1,3 +1,5 @@
+TODO: LLM Expedition Executive Summary for each asteroid and its value
+
 https://www.spaceappschallenge.org/2025/challenges/meteor-madness/
 https://ssd.jpl.nasa.gov/planets/approx_pos.html
 https://ssd.jpl.nasa.gov/tools/sbdb_query.html
