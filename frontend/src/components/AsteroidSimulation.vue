@@ -7,18 +7,16 @@
       </div>
     </template>
     <template #content>
-      <div
-        class="h-80 bg-gradient-to-br from-blue-900/20 to-purple-900/20 rounded-lg border border-blue-500/20 flex items-center justify-center"
-      >
-        <div v-if="!selectedAsteroid" class="text-center text-purple-300">
-          <i class="pi pi-eye text-4xl mb-4 block"></i>
+      <div class="simulation-container">
+        <div v-if="!selectedAsteroid" class="content-center text-purple-300">
+          <i class="pi pi-eye text-4xl mb-4"></i>
           <p>Select an asteroid to view 3D simulation</p>
         </div>
-        <div v-else class="text-center text-white">
+        <div v-else class="content-center">
           <div class="animate-pulse">
-            <i class="pi pi-spin pi-spinner text-4xl mb-4 block"></i>
-            <p>Loading 3D simulation for {{ selectedAsteroid.name }}...</p>
-            <p class="text-sm text-purple-300 mt-2">3D visualization will be integrated here</p>
+            <i class="pi pi-spin pi-spinner text-4xl mb-4"></i>
+            <p class="mb-2">Loading 3D simulation for {{ selectedAsteroid.name }}...</p>
+            <p class="text-sm text-purple-300">3D visualization will be integrated here</p>
           </div>
         </div>
       </div>
@@ -36,3 +34,30 @@ interface Props {
 
 defineProps<Props>()
 </script>
+
+<style scoped>
+.simulation-container {
+  height: 320px;
+  background: linear-gradient(135deg, rgba(30, 58, 138, 0.2) 0%, rgba(88, 28, 135, 0.2) 100%);
+  border-radius: 0.5rem;
+  border: 1px solid rgba(59, 130, 246, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  position: relative;
+}
+
+.content-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  color: white;
+}
+
+.content-center.text-purple-300 {
+  color: rgb(196 181 253);
+}
+</style>
