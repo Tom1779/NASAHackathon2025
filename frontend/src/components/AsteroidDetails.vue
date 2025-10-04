@@ -15,10 +15,6 @@
             <span class="text-white font-medium">{{ selectedAsteroid.name }}</span>
           </div>
           <div class="flex justify-between items-center py-2 border-b border-purple-500/20">
-            <span class="text-purple-300">ID:</span>
-            <span class="text-white">{{ selectedAsteroid.id }}</span>
-          </div>
-          <div class="flex justify-between items-center py-2 border-b border-purple-500/20">
             <span class="text-purple-300">Reference ID:</span>
             <span class="text-white">{{ selectedAsteroid.neo_reference_id }}</span>
           </div>
