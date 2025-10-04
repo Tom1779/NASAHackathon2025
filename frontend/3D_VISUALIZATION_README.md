@@ -27,12 +27,12 @@ Manages the 3D visualization scene with Three.js.
 
 **Features:**
 - **Sun**: Yellow sphere at origin with point light
-- **Earth**: Blue sphere orbiting at 1 AU with visible orbit path
-- **Asteroid**: Dynamically sized sphere based on diameter
+- **Earth**: Blue sphere orbiting at 1 AU with accurate date-based positioning
+- **Asteroid**: Dynamically sized white sphere based on diameter
 - **Asteroid Orbit**: Orange elliptical path showing full orbital trajectory
 - **Starfield**: 5000 random stars for space background
 - **Camera**: Automatically positioned to frame the asteroid's orbit
-- **Animation**: Earth rotates around the Sun
+- **Time-Based Simulation**: Date timeline slider controls accurate positions
 - **Interactive Controls**: OrbitControls for zoom, pan, and rotation
   - **Left Mouse Button**: Rotate camera around the scene
   - **Mouse Wheel**: Zoom in/out (50-1000 unit range)
@@ -41,10 +41,18 @@ Manages the 3D visualization scene with Three.js.
 
 **Key Methods:**
 - `setAsteroid()` - Adds asteroid with orbital elements to the scene
+- `setTimelineDate()` - Updates Earth and asteroid positions based on selected date
 - `fitCameraToOrbit()` - Adjusts camera to view the entire asteroid orbit
 - `resetCamera()` - Returns camera to default position
 - `getControls()` - Access OrbitControls for advanced customization
 - `dispose()` - Clean up resources when component unmounts
+
+**Time-Based Positioning:**
+- Uses accurate Keplerian orbital mechanics
+- Calculates Julian Date from JavaScript Date
+- Earth position based on 365.25-day orbital period from J2000 epoch
+- Asteroid position calculated using `calculateMeanAnomalyAtTime()` with orbital elements
+- Updates positions in real-time as timeline slider changes
 
 ### 3. **Orbital Data Composable (`composables/useOrbitalData.ts`)**
 Vue composable for fetching and managing orbital data.
@@ -63,12 +71,18 @@ Vue component that integrates everything together.
 - No asteroid selected - Shows placeholder message
 - Loading orbital data - Shows spinner
 - Error state - Displays error message
-- Visualization active - Renders 3D scene
+- Visualization active - Renders 3D scene with timeline controls
+
+**Timeline Controls:**
+- Date slider (0-365 days from current date)
+- Formatted date display showing selected date
+- Real-time position updates as slider moves
 
 **Lifecycle:**
 - Watches for asteroid selection changes
 - Fetches orbital data when asteroid is selected
 - Creates/updates Three.js scene when data is ready
+- Watches timeline value and updates scene positions
 - Cleans up scene on unmount or asteroid deselection
 
 ## Data Flow
@@ -86,7 +100,13 @@ orbitalElementsToPosition calculates 3D coordinates
     ↓
 AsteroidScene renders Sun, Earth, asteroid, and orbits
     ↓
-Animation loop updates positions and camera
+User adjusts timeline slider
+    ↓
+setTimelineDate() updates positions based on date
+    ↓
+calculateMeanAnomalyAtTime() computes orbital positions
+    ↓
+Scene updates Earth and asteroid to accurate positions
 ```
 
 ## Usage Example
@@ -99,12 +119,14 @@ The component is used in your main app like this:
 
 When an asteroid from NEO API is selected:
 1. Component fetches orbital elements from SBDB using asteroid ID
-2. Parses elements (a, e, i, om, w, ma)
+2. Parses elements (a, e, i, om, w, ma, epoch)
 3. Calculates 3D positions along the orbit
 4. Creates Three.js scene with Sun at origin
-5. Renders Earth orbiting at 1 AU
+5. Renders Earth orbiting at 1 AU with accurate date-based position
 6. Shows asteroid at current position with full orbital path
-7. Animates the scene
+7. Timeline slider allows scrubbing through 365 days
+8. Earth and asteroid positions update accurately as timeline changes
+9. Uses Julian Date conversion for precise astronomical calculations
 
 ## Coordinate System
 
@@ -125,13 +147,15 @@ When an asteroid from NEO API is selected:
 ### Earth
 - 3 unit radius blue sphere
 - Circular orbit at 1 AU
-- Animated rotation around Sun
+- Position calculated based on timeline date using J2000 epoch
+- Completes one orbit every 365.25 days
 
 ### Asteroid
-- Size scaled based on diameter (1-5 units)
-- Gray color with metallic appearance
+- Size scaled based on diameter (5-15 units)
+- Bright white color for high visibility
 - Text label showing name
-- Current position on orbit
+- Position accurately calculated using Keplerian mechanics
+- Updates in real-time as timeline changes
 
 ### Asteroid Orbit
 - Orange elliptical line
@@ -140,7 +164,13 @@ When an asteroid from NEO API is selected:
 
 ## Interactive Controls
 
-The 3D visualization supports full interactive controls via OrbitControls:
+The 3D visualization supports full interactive controls via OrbitControls and a date timeline:
+
+### Timeline Controls
+- **Date Slider**: Scrub through 365 days from current date
+- **Date Display**: Shows selected date in readable format (e.g., "October 4, 2025")
+- **Real-Time Updates**: Earth and asteroid positions update instantly as slider moves
+- **Accurate Positioning**: Uses Julian Date and Keplerian orbital mechanics
 
 ### Mouse Controls
 - **Left Click + Drag**: Rotate camera around the scene
@@ -167,23 +197,26 @@ The 3D visualization supports full interactive controls via OrbitControls:
 - **Responsive**: Handles window resize events
 - **Lazy loading**: Only creates scene when asteroid is selected
 - **Smooth controls**: Damped camera movement prevents jarring interactions
+- **On-demand updates**: Position calculations only run when timeline changes
 
 ## Future Enhancements
 
 Potential improvements:
 1. ~~Add orbit controls (OrbitControls from three/examples)~~ ✅ **Completed**
-2. Show close approach points along trajectory
-3. Display velocity vectors
-4. Add time scrubbing to see asteroid at different dates
-5. Compare multiple asteroids simultaneously
-6. Show asteroid rotation
-7. Add realistic textures for Earth and asteroid
-8. Display orbital parameters as text overlay
-9. Add screenshot/export functionality
-10. Show scale reference (AU distances)
-11. Add touch controls for mobile devices
-12. Add camera presets (top view, side view, etc.)
-13. Add mini-map or compass for orientation
+2. ~~Add date timeline for accurate orbital positions~~ ✅ **Completed**
+3. Show close approach points along trajectory
+4. Display velocity vectors at current position
+5. Add time animation (play/pause to watch orbits over time)
+6. Compare multiple asteroids simultaneously
+7. Show asteroid rotation
+8. Add realistic textures for Earth and asteroid
+9. Display orbital parameters as text overlay
+10. Add screenshot/export functionality
+11. Show scale reference (AU distances)
+12. Add touch controls for mobile devices
+13. Add camera presets (top view, side view, etc.)
+14. Add mini-map or compass for orientation
+15. Extend timeline beyond 365 days for long-period asteroids
 
 ## Dependencies
 
@@ -205,8 +238,12 @@ To test the visualization:
 2. Wait for orbital data to load
 3. Scene should render with Sun, Earth, and asteroid
 4. Asteroid orbit should be visible as orange ellipse
-5. Animation should show Earth rotating
-6. Camera should auto-position to frame the orbit
+5. Earth and asteroid should be positioned accurately for current date
+6. **Test Timeline Controls:**
+   - Move the date slider left and right
+   - Observe Earth and asteroid move to accurate positions
+   - Verify date display updates correctly
+   - Check that positions change smoothly
 7. **Test Interactive Controls:**
    - Click and drag with left mouse button to rotate
    - Use scroll wheel to zoom in/out

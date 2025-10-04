@@ -6,7 +6,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import type { OrbitalElements } from './orbitalMechanics';
-import { orbitalElementsToPosition, generateOrbitPath } from './orbitalMechanics';
+import { orbitalElementsToPosition, generateOrbitPath, calculateMeanAnomalyAtTime } from './orbitalMechanics';
 
 export interface SceneConfig {
   container: HTMLElement;
@@ -33,6 +33,11 @@ export class AsteroidScene {
   private animationId: number | null = null;
   private earthAngle = 0;
   private asteroidAngle = 0;
+
+  // Orbital elements for time-based positioning
+  private asteroidElements: OrbitalElements | null = null;
+  private asteroidName: string = '';
+  private asteroidDiameter: number = 1.0;
 
   // Scale factor (for visualization, 1 unit = 1 AU)
   private readonly SCALE = 50;
@@ -199,6 +204,11 @@ export class AsteroidScene {
    * Add or update asteroid with orbital elements
    */
   public setAsteroid(elements: OrbitalElements, name: string, diameter: number): void {
+    // Store orbital elements for time-based updates
+    this.asteroidElements = elements;
+    this.asteroidName = name;
+    this.asteroidDiameter = diameter;
+
     // Remove existing asteroid and orbit
     if (this.asteroid) {
       this.scene.remove(this.asteroid);
@@ -300,18 +310,11 @@ export class AsteroidScene {
   }
 
   /**
-   * Animate Earth around Sun and asteroid along its orbit
+   * Animation loop - now only handles controls and rendering
+   * Position updates are driven by setTimelineDate()
    */
   private animate = (): void => {
     this.animationId = requestAnimationFrame(this.animate);
-
-    // Rotate Earth around Sun
-    this.earthAngle += 0.001;
-    if (this.earth) {
-      const earthX = Math.cos(this.earthAngle) * this.EARTH_ORBIT_RADIUS * this.SCALE;
-      const earthZ = Math.sin(this.earthAngle) * this.EARTH_ORBIT_RADIUS * this.SCALE;
-      this.earth.position.set(earthX, 0, earthZ);
-    }
 
     // Update controls (required for damping)
     this.controls.update();
@@ -371,11 +374,60 @@ export class AsteroidScene {
   }
 
   /**
+   * Convert JavaScript Date to Julian Date
+   */
+  private dateToJulian(date: Date): number {
+    return (date.getTime() / 86400000) + 2440587.5;
+  }
+
+  /**
    * Reset camera to default view
    */
   public resetCamera(): void {
     this.camera.position.set(150, 100, 150);
     this.camera.lookAt(0, 0, 0);
     this.controls.reset();
+  }
+
+  /**
+   * Update Earth and asteroid positions based on timeline date
+   */
+  public setTimelineDate(date: Date): void {
+    const julianDate = this.dateToJulian(date);
+
+    // Update Earth position
+    // Earth completes one orbit in 365.25 days
+    // Calculate days since J2000 epoch (January 1, 2000, 12:00 TT)
+    const j2000 = 2451545.0;
+    const daysSinceJ2000 = julianDate - j2000;
+    const earthAngle = (daysSinceJ2000 / 365.25) * 2 * Math.PI;
+
+    if (this.earth) {
+      const earthX = Math.cos(earthAngle) * this.EARTH_ORBIT_RADIUS * this.SCALE;
+      const earthZ = Math.sin(earthAngle) * this.EARTH_ORBIT_RADIUS * this.SCALE;
+      this.earth.position.set(earthX, 0, earthZ);
+    }
+
+    // Update asteroid position
+    if (this.asteroid && this.asteroidElements) {
+      // Calculate mean anomaly at the target date
+      const meanAnomaly = calculateMeanAnomalyAtTime(this.asteroidElements, julianDate);
+
+      // Create updated elements with new mean anomaly
+      const updatedElements = {
+        ...this.asteroidElements,
+        ma: meanAnomaly
+      };
+
+      // Calculate new position
+      const position = orbitalElementsToPosition(updatedElements);
+
+      // Update asteroid position in scene
+      this.asteroid.position.set(
+        position.x * this.SCALE,
+        position.z * this.SCALE,
+        position.y * this.SCALE
+      );
+    }
   }
 }
