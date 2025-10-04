@@ -53,7 +53,7 @@ import { useAsteroids } from './composables/useAsteroids'
 import type { Asteroid } from './types/asteroid'
 
 // Composables
-const { asteroids, loading: loadingAsteroids, fetchAsteroids } = useAsteroids()
+const { asteroids, loading: loadingAsteroids, fetchAsteroids, searchAsteroids, fetchDetailsForId } = useAsteroids()
 
 // Reactive data
 const selectedAsteroid = ref<Asteroid | null>(null)
@@ -66,14 +66,48 @@ const onAnalyzeAsteroid = (asteroid: Asteroid) => {
 }
 
 const onSearchAsteroids = (query: string) => {
-  console.log('Searching asteroids:', query)
-  // This is where you would implement server-side search for large datasets
-  // For now, filtering is done client-side in the AsteroidSelector component
+  // Route the selector's search into our composable catalog search so results
+  // come from the CSV (no NEO queries until selection).
+  console.log('Searching asteroids (catalog):', query)
+  try {
+    const results = searchAsteroids(query)
+    asteroids.value = results
+  } catch (e) {
+    console.warn('Catalog search failed, leaving asteroids list unchanged', e)
+  }
 }
 
 // Lifecycle
+// When the app mounts, load the lightweight catalog + initial data placeholder
+// Do NOT fetch the full NEO feed on mount. We'll show the CSV catalog and
+// only query SBDB/NEO when the user selects an entry.
 onMounted(() => {
-  fetchAsteroids()
+  // Populate the selector with the full CSV catalog initially
+  // by performing an empty search which returns the catalog mapping.
+  try { asteroids.value = searchAsteroids('') } catch (e) { /* ignore */ }
+})
+
+// Watch selectedAsteroid for lightweight picks and fetch full details when needed
+import { watch } from 'vue'
+
+// When the user selects a catalog entry (which is lightweight), fetch fuller
+// details from SBDB using the spkid (id) and then call the NEO details API
+// using the same identifier to get any additional NEO-specific data. We log
+// the NEO response to the Chrome console as requested.
+watch(selectedAsteroid, async (val) => {
+  if (!val) return
+
+  // If the selected item looks like a lightweight catalog entry (no JPL url
+  // or zero magnitude), look up SBDB first to populate details.
+  if (!val.nasa_jpl_url || val.absolute_magnitude_h === 0) {
+    const full = await fetchDetailsForId(val.id)
+    if (full) {
+      selectedAsteroid.value = full
+    }
+  }
+
+  // NEO enrichment and caching are handled inside the composable's
+  // `fetchDetailsForId`, which we already call above. No further action here.
 })
 </script>
 

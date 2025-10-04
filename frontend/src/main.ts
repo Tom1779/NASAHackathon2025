@@ -6,7 +6,7 @@ import { createPinia } from 'pinia'
 import PrimeVue from 'primevue/config'
 import Aura from '@primeuix/themes/aura'
 import { fetchSmallBodyData } from './api/sbdb'
-import { fetchNeoData, fetchNeoDetails } from './api/neo'
+import { fetchNeoData, fetchNeoDetails, fetchNeoBrowse } from './api/neo'
 
 import App from './App.vue'
 
@@ -38,25 +38,20 @@ testSbdbApi();
 // Make sample NEO API queries during development so the console shows NEO logs
 const testNeoApi = async () => {
   try {
-    // Use a small date range to keep the response small
-    const start = '2023-09-01'
-    const end = '2023-09-02'
-    const feed = await fetchNeoData(start, end)
-    console.log('Mock NEO feed Query Result (summary):', { dates: Object.keys(feed?.near_earth_objects || {}) })
-
-    // If there's at least one NEO id available, fetch details for the first one
-    const grouped = feed?.near_earth_objects
-    const items = grouped ? Object.values(grouped).flat() : []
-    const first = items[0]
-    if (first) {
-      const firstAny: any = first
+    console.warn('Starting full NEO browse. This will issue many requests and may hit NASA rate limits. Proceed with caution.')
+    const all = await fetchNeoBrowse(250) // 250ms delay between pages by default
+    console.log('NEO browse completed. Total asteroids fetched:', (all?.near_earth_objects || []).length)
+    // Optionally fetch details for the first few
+    const items = all?.near_earth_objects || []
+    if (items.length > 0) {
+      const firstAny: any = items[0]
       if (firstAny.id) {
-        const details = await fetchNeoDetails(firstAny.id)
-        console.log('Mock NEO details Query Result (id):', details?.id)
+        const details = await fetchNeoDetails(String(firstAny.id))
+        console.log('Example NEO details:', details?.id, details?.name)
       }
     }
   } catch (err) {
-    console.error('Error during mock NEO API query:', err)
+    console.error('Error during full NEO browse:', err)
   }
 }
 
