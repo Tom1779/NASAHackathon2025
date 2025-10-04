@@ -15,6 +15,7 @@
             :loading-asteroids="loadingAsteroids"
             @update:selected-asteroid="selectedAsteroid = $event"
             @analyze="onAnalyzeAsteroid"
+            @search="onSearchAsteroids"
           />
         </div>
 
@@ -62,6 +63,12 @@ const onAnalyzeAsteroid = (asteroid: Asteroid) => {
   console.log('Analyzing asteroid:', asteroid.name)
   // This is where you would trigger detailed analysis
   // You can emit events or call methods for chemical composition analysis
+}
+
+const onSearchAsteroids = (query: string) => {
+  console.log('Searching asteroids:', query)
+  // This is where you would implement server-side search for large datasets
+  // For now, filtering is done client-side in the AsteroidSelector component
 }
 
 // Lifecycle
