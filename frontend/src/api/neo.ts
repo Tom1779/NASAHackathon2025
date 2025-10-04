@@ -11,14 +11,29 @@ const BASE_URL = 'https://api.nasa.gov/neo/rest/v1';
  */
 export const fetchNeoData = async (startDate: string, endDate: string) => {
     try {
-        const response = await axios.get(`${BASE_URL}/feed`, {
-            params: {
-                start_date: startDate,
-                end_date: endDate,
-                api_key: NASA_API_KEY,
-            },
-        });
-        return response.data;
+        const url = `${BASE_URL}/feed`;
+        const params = {
+            start_date: startDate,
+            end_date: endDate,
+            api_key: NASA_API_KEY,
+        };
+        console.log('Sending request to NEO feed API:', { url, params });
+        const response = await axios.get(url, { params });
+        // The feed response groups NEOs by date under `near_earth_objects`
+        const data = response.data;
+        try {
+            const grouped = data?.near_earth_objects;
+            const items = Array.isArray(grouped) ? grouped : (grouped ? Object.values(grouped).flat() : []);
+            items.forEach((it: any) => {
+                const name = it?.name || it?.full_name || it?.designation || it?.id || 'Unknown NEO';
+                console.log('NEO feed item name:', name);
+            });
+        } catch (e) {
+            // Non-fatal logging error
+            console.warn('Failed to extract NEO names from feed response', e);
+        }
+
+        return data;
     } catch (error) {
         console.error('Error fetching NEO data:', error);
         throw error;
@@ -36,8 +51,19 @@ export const fetchNeoDetails = async (neoId: string) => {
             params: {
                 api_key: NASA_API_KEY,
             },
+            
         });
-        return response.data;
+        const url = `${BASE_URL}/neo/${neoId}`;
+        const params = { api_key: NASA_API_KEY };
+        console.log('Sending request to NEO details API:', { url, params });
+        const data = response.data;
+        try {
+            const name = data?.name || data?.full_name || data?.designation || data?.id || 'Unknown NEO';
+            console.log('NEO details result name:', name, { id: neoId });
+        } catch (e) {
+            console.warn('Failed to extract NEO name from details response', e);
+        }
+        return data;
     } catch (error) {
         console.error('Error fetching NEO details:', error);
         throw error;
