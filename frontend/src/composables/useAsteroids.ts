@@ -1,176 +1,89 @@
 import { ref, type Ref } from 'vue'
 import type { Asteroid } from '../types/asteroid'
-import { fetchNeoData } from '../api/neo'
+import { fetchNeoData, fetchNeoDetails } from '../api/neo'
 import { fetchSmallBodyData } from '../api/sbdb'
-// Load the SBDB query results CSV as raw text (Vite raw import)
 import sbdbCsv from '../data/sbdb_query_results.csv?raw'
-import { fetchNeoDetails } from '../api/neo'
 
 export function useAsteroids() {
   const asteroids: Ref<Asteroid[]> = ref([])
   const loading = ref(false)
   const error = ref<string | null>(null)
 
-  // Keep the mock dataset available as a safe fallback
-  const mockAsteroids: Asteroid[] = [
-    // lightweight fallback entries
-    {
-      links: { self: 'http://api.nasa.gov/neo/rest/v1/neo/2465633?api_key=DEMO_KEY' },
-      id: '2465633',
-      neo_reference_id: '2465633',
-      name: '465633 (2009 JR5)',
-      nasa_jpl_url: 'https://ssd.jpl.nasa.gov/tools/sbdb_lookup.html#/?sstr=2465633',
-      absolute_magnitude_h: 20.44,
-      estimated_diameter: {},
-      is_potentially_hazardous_asteroid: true,
-      close_approach_data: [],
-      is_sentry_object: false,
-    },
-    {
-      links: { self: 'http://api.nasa.gov/neo/rest/v1/neo/3542519?api_key=DEMO_KEY' },
-      id: '3542519',
-      neo_reference_id: '3542519',
-      name: 'Bennu (101955)',
-      nasa_jpl_url: 'https://ssd.jpl.nasa.gov/tools/sbdb_lookup.html#/?sstr=3542519',
-      absolute_magnitude_h: 20.9,
-      estimated_diameter: {},
-      is_potentially_hazardous_asteroid: false,
-      close_approach_data: [],
-      is_sentry_object: false,
-    },
-    {
-      links: { self: 'http://api.nasa.gov/neo/rest/v1/neo/2000433?api_key=DEMO_KEY' },
-      id: '2000433',
-      neo_reference_id: '2000433',
-      name: '433 Eros',
-      nasa_jpl_url: 'https://ssd.jpl.nasa.gov/tools/sbdb_lookup.html#/?sstr=2000433',
-      absolute_magnitude_h: 11.16,
-      estimated_diameter: {},
-      is_potentially_hazardous_asteroid: false,
-      close_approach_data: [],
-      is_sentry_object: false,
-    },
-  ]
-
-  // Parse the SBDB CSV into a lightweight catalog of {id, name}
+  /** --- CSV Parsing (Lightweight SBDB Catalog) --- **/
   const catalog = ref<{ id: string; name: string }[]>([])
   try {
-    const text = (sbdbCsv as string) || ''
-    const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0)
-    // header present, skip first line
-    const rows = lines.slice(1)
-    catalog.value = rows.map((r) => {
-      // crude CSV parse: "spkid","full_name"
-      const cols = r.split(',')
-      const id = cols[0]?.replace(/"/g, '').trim() || ''
-      // join remaining columns (in case name contains commas), remove surrounding quotes
-      const name = cols.slice(1).join(',').replace(/"/g, '').trim() || ''
-      return { id, name }
-    }).filter((c) => c.id && c.name)
+    const lines = (sbdbCsv as string)
+      .split(/\r?\n/)
+      .map(l => l.trim())
+      .filter(Boolean)
+    const [, ...rows] = lines // skip header
+    catalog.value = rows.map(r => {
+      const [idRaw, ...nameParts] = r.split(',')
+      return {
+        id: (idRaw ?? '').replace(/"/g, '').trim(),
+        name: nameParts.join(',').replace(/"/g, '').trim(),
+      }
+    }).filter(c => c.id && c.name)
   } catch (e) {
-    console.warn('Failed to parse sbdb CSV catalog', e)
+    console.warn('Failed to parse SBDB CSV catalog', e)
     catalog.value = []
   }
 
-  // Map NASA NEO object to our Asteroid type (best effort)
-  const mapNeoToAsteroid = (neo: any): Asteroid => {
-    // Convert any string numbers to actual numbers for diameter estimates
-    const processedDiameter = neo?.estimated_diameter ? {
-      kilometers: neo.estimated_diameter.kilometers ? {
-        estimated_diameter_min: Number(neo.estimated_diameter.kilometers.estimated_diameter_min || 0),
-        estimated_diameter_max: Number(neo.estimated_diameter.kilometers.estimated_diameter_max || 0)
-      } : undefined,
-      meters: neo.estimated_diameter.meters ? {
-        estimated_diameter_min: Number(neo.estimated_diameter.meters.estimated_diameter_min || 0),
-        estimated_diameter_max: Number(neo.estimated_diameter.meters.estimated_diameter_max || 0)
-      } : undefined,
-      feet: neo.estimated_diameter.feet ? {
-        estimated_diameter_min: Number(neo.estimated_diameter.feet.estimated_diameter_min || 0),
-        estimated_diameter_max: Number(neo.estimated_diameter.feet.estimated_diameter_max || 0)
-      } : undefined
-    } : {}
+  /** --- Helper: Normalize NEO API Data --- **/
+  const mapNeoToAsteroid = (neo: any): Asteroid => ({
+    links: { self: neo?.links?.self || '' },
+    id: String(neo?.id || neo?.neo_reference_id || ''),
+    neo_reference_id: String(neo?.neo_reference_id || neo?.id || ''),
+    name: neo?.name || 'Unknown',
+    nasa_jpl_url: neo?.nasa_jpl_url || '',
+    absolute_magnitude_h: Number(neo?.absolute_magnitude_h || 0),
+    estimated_diameter: {
+      kilometers: neo?.estimated_diameter?.kilometers && {
+        estimated_diameter_min: +neo.estimated_diameter.kilometers.estimated_diameter_min || 0,
+        estimated_diameter_max: +neo.estimated_diameter.kilometers.estimated_diameter_max || 0,
+      },
+      meters: neo?.estimated_diameter?.meters && {
+        estimated_diameter_min: +neo.estimated_diameter.meters.estimated_diameter_min || 0,
+        estimated_diameter_max: +neo.estimated_diameter.meters.estimated_diameter_max || 0,
+      },
+      feet: neo?.estimated_diameter?.feet && {
+        estimated_diameter_min: +neo.estimated_diameter.feet.estimated_diameter_min || 0,
+        estimated_diameter_max: +neo.estimated_diameter.feet.estimated_diameter_max || 0,
+      },
+    },
+    is_potentially_hazardous_asteroid: Boolean(neo?.is_potentially_hazardous_asteroid),
+    close_approach_data: Array.isArray(neo?.close_approach_data) ? neo.close_approach_data : [],
+    is_sentry_object: Boolean(neo?.is_sentry_object),
+  })
 
-    return {
-      links: { self: neo?.links?.self || '' },
-      id: String(neo?.id || neo?.neo_reference_id || neo?.designation || ''),
-      neo_reference_id: String(neo?.neo_reference_id || neo?.id || ''),
-      name: neo?.name || neo?.full_name || neo?.designation || 'Unknown',
-      nasa_jpl_url: neo?.nasa_jpl_url || '',
-      absolute_magnitude_h: Number(neo?.absolute_magnitude_h || 0),
-      estimated_diameter: processedDiameter,
-      is_potentially_hazardous_asteroid: Boolean(neo?.is_potentially_hazardous_asteroid),
-      close_approach_data: Array.isArray(neo?.close_approach_data) ? neo.close_approach_data : [],
-      is_sentry_object: Boolean(neo?.is_sentry_object),
-    }
-  }
-
+  /** --- Fetch NEO Data --- **/
   const fetchAsteroids = async () => {
     loading.value = true
     error.value = null
 
     try {
-      // Use a small date range to avoid large responses and rate limits
-      const start = new Date()
-      const end = new Date(start)
-      end.setDate(start.getDate() + 1)
-      const startStr = start.toISOString().slice(0, 10)
-      const endStr = end.toISOString().slice(0, 10)
+      const start = new Date().toISOString().slice(0, 10)
+      const end = new Date(Date.now() + 86400000).toISOString().slice(0, 10)
 
-      const data = await fetchNeoData(startStr, endStr)
-      const grouped = data?.near_earth_objects
-      const items: any[] = grouped ? Object.values(grouped).flat() : []
-      const mapped: Asteroid[] = items.map(mapNeoToAsteroid)
+      const data = await fetchNeoData(start, end)
+      const grouped = data?.near_earth_objects || {}
+      const allItems = Object.values(grouped).flat() as any[]
 
-      // Optionally enrich items with SBDB lookups if needed (disabled by default)
-      // Example: fetchSmallBodyData(mapped[0].id)
-
-      if (mapped.length > 0) {
-        asteroids.value = mapped
-      } else {
-        // If no data returned, fallback to mock dataset
-        asteroids.value = mockAsteroids
-      }
+      asteroids.value = allItems.map(mapNeoToAsteroid)
     } catch (err) {
+      console.error('Error fetching asteroids:', err)
       error.value = err instanceof Error ? err.message : 'Failed to fetch asteroids'
-      console.error('Error fetching asteroids from NEO API, falling back to mock data:', err)
-      asteroids.value = mockAsteroids
+      asteroids.value = []
     } finally {
       loading.value = false
     }
   }
 
-  const getAsteroidById = (id: string): Asteroid | undefined => {
-    return asteroids.value.find((asteroid) => asteroid.id === id)
-  }
-
+  /** --- Search Local Catalog --- **/
   const searchAsteroids = (query: string): Asteroid[] => {
-    const lowercaseQuery = query.trim().toLowerCase()
-
-    // If the query is empty and we have the CSV catalog, return the full
-    // catalog mapped to lightweight Asteroid objects so the selector shows
-    // entries without any NEO calls.
-    if (!lowercaseQuery) {
-      if (catalog.value.length > 0) {
-        return catalog.value.map((m) => ({
-          links: { self: '' },
-          id: m.id,
-          neo_reference_id: m.id,
-          name: m.name,
-          nasa_jpl_url: '',
-          absolute_magnitude_h: 0,
-          estimated_diameter: {},
-          is_potentially_hazardous_asteroid: false,
-          close_approach_data: [],
-          is_sentry_object: false,
-        }))
-      }
-      return asteroids.value
-    }
-
-    // Non-empty query: prefer returning lightweight catalog matches (name + id)
-    if (catalog.value.length > 0) {
-      const matches = catalog.value.filter((c) => c.name.toLowerCase().includes(lowercaseQuery) || c.id.includes(lowercaseQuery))
-      return matches.map((m) => ({
+    const q = query.trim().toLowerCase()
+    if (!q && catalog.value.length > 0) {
+      return catalog.value.map(m => ({
         links: { self: '' },
         id: m.id,
         neo_reference_id: m.id,
@@ -184,112 +97,93 @@ export function useAsteroids() {
       }))
     }
 
-    return asteroids.value.filter(
-      (asteroid) =>
-        asteroid.name.toLowerCase().includes(lowercaseQuery) ||
-        asteroid.id.includes(lowercaseQuery),
+    const filteredCatalog = catalog.value.filter(c =>
+      c.name.toLowerCase().includes(q) || c.id.includes(q),
+    )
+
+    if (filteredCatalog.length > 0) {
+      return filteredCatalog.map(m => ({
+        links: { self: '' },
+        id: m.id,
+        neo_reference_id: m.id,
+        name: m.name,
+        nasa_jpl_url: '',
+        absolute_magnitude_h: 0,
+        estimated_diameter: {},
+        is_potentially_hazardous_asteroid: false,
+        close_approach_data: [],
+        is_sentry_object: false,
+      }))
+    }
+
+    return asteroids.value.filter(a =>
+      a.name.toLowerCase().includes(q) || a.id.includes(q),
     )
   }
 
-  // Fetch fuller details for a catalog ID using SBDB (preferred) or NEO details as a fallback
-  // Simple in-memory cache to avoid repeated SBDB/NEO hits for the same id.
+  /** --- Fetch SBDB + NEO Details (Cached) --- **/
   const detailsCache = new Map<string, Asteroid>()
 
   const fetchDetailsForId = async (id: string): Promise<Asteroid | undefined> => {
-    if (!id) return undefined
-
-    // Return cached result if available
-    if (detailsCache.has(id)) {
-      return detailsCache.get(id)
-    }
+    if (!id) return
+    if (detailsCache.has(id)) return detailsCache.get(id)
 
     try {
-      // Primary lookup via SBDB
       const sbdbResp = await fetchSmallBodyData(id)
       const obj = sbdbResp?.object || sbdbResp || {}
-      const name = obj?.full_name || obj?.fullname || obj?.fullName || obj?.designation || `ID ${id}`
-
-      // Extract composition data from physical parameters if available
+      const name = obj.full_name || obj.fullname || obj.designation || `ID ${id}`
       const physPar = sbdbResp?.phys_par || []
-      const tholenType = physPar.find((p: any) => p.name === 'spec_T')?.value
-      const smassiiType = physPar.find((p: any) => p.name === 'spec_B')?.value
-      const diameter = physPar.find((p: any) => p.name === 'diameter')?.value
-      const albedo = physPar.find((p: any) => p.name === 'albedo')?.value
 
-      // Base asteroid object from SBDB
-      let asteroid: Asteroid = {
-        links: { self: obj?.self || '' },
-        id: String(id),
-        neo_reference_id: String(id),
+      const asteroid: Asteroid = {
+        links: { self: obj.self || '' },
+        id,
+        neo_reference_id: id,
         name,
-        nasa_jpl_url: obj?.spk_url || obj?.jpl_url || '',
-        absolute_magnitude_h: Number(obj?.H || obj?.magnitude_h || obj?.absolute_magnitude_h || 0),
-        estimated_diameter: {
-          kilometers: obj?.diameter_km ? {
-            estimated_diameter_min: Number(obj?.diameter_km) * 0.9, // Estimate range as ±10%
-            estimated_diameter_max: Number(obj?.diameter_km) * 1.1
-          } : undefined,
-          meters: obj?.diameter_km ? {
-            estimated_diameter_min: Number(obj?.diameter_km) * 900, // Convert km to m
-            estimated_diameter_max: Number(obj?.diameter_km) * 1100
-          } : undefined,
-          feet: obj?.diameter_km ? {
-            estimated_diameter_min: Number(obj?.diameter_km) * 2952.76, // Convert km to feet
-            estimated_diameter_max: Number(obj?.diameter_km) * 3608.92
-          } : undefined
-        },
-        is_potentially_hazardous_asteroid: Boolean(obj?.is_potentially_hazardous_asteroid || false),
+        nasa_jpl_url: obj.spk_url || obj.jpl_url || '',
+        absolute_magnitude_h: Number(obj.H || 0),
+        estimated_diameter: obj.diameter_km
+          ? {
+              kilometers: {
+                estimated_diameter_min: Number(obj.diameter_km) * 0.9,
+                estimated_diameter_max: Number(obj.diameter_km) * 1.1,
+              },
+            }
+          : {},
+        is_potentially_hazardous_asteroid: Boolean(obj.is_potentially_hazardous_asteroid),
         close_approach_data: [],
         is_sentry_object: false,
-        // Store composition data from SBDB
-        tholen_spectral_type: tholenType,
-        smassii_spectral_type: smassiiType,
-        diameter_km: diameter ? Number(diameter) : undefined,
-        geometric_albedo: albedo ? Number(albedo) : undefined,
+        tholen_spectral_type: physPar.find((p: any) => p.name === 'spec_T')?.value,
+        smassii_spectral_type: physPar.find((p: any) => p.name === 'spec_B')?.value,
+        diameter_km: Number(physPar.find((p: any) => p.name === 'diameter')?.value) || undefined,
+        geometric_albedo: Number(physPar.find((p: any) => p.name === 'albedo')?.value) || undefined,
       }
 
-      // Cache SBDB-derived object immediately to prevent races
       detailsCache.set(id, asteroid)
 
-      // Try to enrich with NEO details only when the SBDB response suggests
-      // this object is a near-Earth object. Many SBDB entries are main-belt
-      // asteroids and will return 404 from the NEO API. Avoid calling NEO for
-      // unlikely candidates to reduce 404 noise and rate usage.
-      const orbitClass = obj?.orbit?.class || obj?.orbit?.type || obj?.orbit_class
-      const isNeoCandidate = Boolean(
-        obj?.is_neo ||
-        obj?.is_potentially_hazardous_asteroid ||
-        (typeof orbitClass === 'string' && /near/i.test(orbitClass)) ||
-        (String(obj?.full_name || obj?.designation || '').toLowerCase().includes('near earth'))
-      )
+      const orbitClass = obj?.orbit?.class || ''
+      const isNeoCandidate =
+        obj.is_neo ||
+        obj.is_potentially_hazardous_asteroid ||
+        /near/i.test(orbitClass)
 
       if (isNeoCandidate) {
         try {
-          const neoResp = await fetchNeoDetails(String(id))
-          try {
-            const mapped = mapNeoToAsteroid(neoResp)
-            // Merge fields from NEO response into our asteroid object, preferring NEO values
-            // for diameter and magnitude when available
-            asteroid = {
-              ...asteroid,
-              ...mapped,
-              estimated_diameter: mapped.estimated_diameter && Object.keys(mapped.estimated_diameter).length > 0
-                ? mapped.estimated_diameter 
+          const neoResp = await fetchNeoDetails(id)
+          const mapped = mapNeoToAsteroid(neoResp)
+          const enriched = {
+            ...asteroid,
+            ...mapped,
+            estimated_diameter:
+              Object.keys(mapped.estimated_diameter || {}).length > 0
+                ? mapped.estimated_diameter
                 : asteroid.estimated_diameter,
-              absolute_magnitude_h: mapped.absolute_magnitude_h || asteroid.absolute_magnitude_h
-            }
-            detailsCache.set(id, asteroid)
-            console.log('NEO details (cached):', neoResp)
-          } catch (e) {
-            console.warn('Failed to map NEO response for', id, e)
+            absolute_magnitude_h: mapped.absolute_magnitude_h || asteroid.absolute_magnitude_h,
           }
-        } catch (e) {
-          // NEO details may not exist for this id; that's expected for many
-          // SBDB objects. We don't treat this as fatal.
-          console.debug('NEO details not available for', id, e)
+          detailsCache.set(id, enriched)
+          return enriched
+        } catch {
+          console.debug('No NEO details available for', id)
         }
-      } else {
-        console.debug('Skipping NEO details fetch for non-NEO candidate', id)
       }
 
       return asteroid
@@ -303,10 +197,9 @@ export function useAsteroids() {
     asteroids,
     loading,
     error,
-    fetchAsteroids,
-    getAsteroidById,
-    searchAsteroids,
     catalog,
+    fetchAsteroids,
+    searchAsteroids,
     fetchDetailsForId,
   }
 }
