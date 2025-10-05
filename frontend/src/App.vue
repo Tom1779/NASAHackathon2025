@@ -17,6 +17,8 @@
             :asteroids="asteroids"
             :loading-asteroids="loadingAsteroids"
             :has-more-neo-results="neoHasMore"
+            :is-loading-all="isLoadingAll"
+            :all-data-loaded="allDataLoaded"
             @update:selected-asteroid="onSelectAsteroid"
             @analyze="onAnalyzeAsteroid"
             @search="onSearchAsteroids"
@@ -63,8 +65,12 @@ const {
   asteroids,
   loading: loadingAsteroids,
   neoHasMore,
+  isLoadingAll,
+  allDataLoaded,
   searchAsteroids,
   loadMoreAsteroids,
+  loadAllDataInBackground,
+  waitForAllData,
   fetchDetailsForId,
   ensureCatalogPrefetched,
 } = useAsteroids()
@@ -81,9 +87,14 @@ const onAnalyzeAsteroid = (asteroid: Asteroid) => {
 }
 
 const onSearchAsteroids = async (query: string) => {
-  // Route the selector's search into our NEO browse API
+  // Wait for all data to be loaded before searching
   console.log('Searching asteroids (NEO browse):', query)
   try {
+    // If there's a query and data isn't fully loaded, wait for it
+    if (query && query.trim() && !allDataLoaded.value) {
+      console.log('Waiting for all data before searching...')
+      await waitForAllData()
+    }
     await searchAsteroids(query)
   } catch (e) {
     console.warn('NEO search failed, leaving asteroids list unchanged', e)
@@ -100,12 +111,20 @@ const onLoadMoreAsteroids = async () => {
 }
 
 // Lifecycle
-// When the app mounts, load the initial NEO data from the browse endpoint
+// When the app mounts, load the initial NEO data and start background loading
 onMounted(async () => {
   // Populate the selector with NEO browse data initially
   try {
     await ensureCatalogPrefetched()
     await searchAsteroids('')
+
+    // Start loading all data in the background
+    console.log('Starting automatic background data load...')
+    loadAllDataInBackground().then(() => {
+      console.log('All NEO data loaded successfully!')
+    }).catch(err => {
+      console.error('Background loading encountered an error:', err)
+    })
   } catch (e) {
     console.debug('Initial NEO load failed', e)
   }
