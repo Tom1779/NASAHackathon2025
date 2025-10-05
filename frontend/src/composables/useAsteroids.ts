@@ -74,6 +74,22 @@ export function useAsteroids() {
 
   // Map NASA NEO object to our Asteroid type (best effort)
   const mapNeoToAsteroid = (neo: any): Asteroid => {
+    // Convert any string numbers to actual numbers for diameter estimates
+    const processedDiameter = neo?.estimated_diameter ? {
+      kilometers: neo.estimated_diameter.kilometers ? {
+        estimated_diameter_min: Number(neo.estimated_diameter.kilometers.estimated_diameter_min || 0),
+        estimated_diameter_max: Number(neo.estimated_diameter.kilometers.estimated_diameter_max || 0)
+      } : undefined,
+      meters: neo.estimated_diameter.meters ? {
+        estimated_diameter_min: Number(neo.estimated_diameter.meters.estimated_diameter_min || 0),
+        estimated_diameter_max: Number(neo.estimated_diameter.meters.estimated_diameter_max || 0)
+      } : undefined,
+      feet: neo.estimated_diameter.feet ? {
+        estimated_diameter_min: Number(neo.estimated_diameter.feet.estimated_diameter_min || 0),
+        estimated_diameter_max: Number(neo.estimated_diameter.feet.estimated_diameter_max || 0)
+      } : undefined
+    } : {}
+
     return {
       links: { self: neo?.links?.self || '' },
       id: String(neo?.id || neo?.neo_reference_id || neo?.designation || ''),
@@ -81,7 +97,7 @@ export function useAsteroids() {
       name: neo?.name || neo?.full_name || neo?.designation || 'Unknown',
       nasa_jpl_url: neo?.nasa_jpl_url || '',
       absolute_magnitude_h: Number(neo?.absolute_magnitude_h || 0),
-      estimated_diameter: neo?.estimated_diameter || {},
+      estimated_diameter: processedDiameter,
       is_potentially_hazardous_asteroid: Boolean(neo?.is_potentially_hazardous_asteroid),
       close_approach_data: Array.isArray(neo?.close_approach_data) ? neo.close_approach_data : [],
       is_sentry_object: Boolean(neo?.is_sentry_object),
@@ -128,10 +144,30 @@ export function useAsteroids() {
   }
 
   const searchAsteroids = (query: string): Asteroid[] => {
-    if (!query.trim()) return asteroids.value
+    const lowercaseQuery = query.trim().toLowerCase()
 
-    const lowercaseQuery = query.toLowerCase()
-    // If we have the SBDB catalog, prefer returning lightweight catalog matches (name + id)
+    // If the query is empty and we have the CSV catalog, return the full
+    // catalog mapped to lightweight Asteroid objects so the selector shows
+    // entries without any NEO calls.
+    if (!lowercaseQuery) {
+      if (catalog.value.length > 0) {
+        return catalog.value.map((m) => ({
+          links: { self: '' },
+          id: m.id,
+          neo_reference_id: m.id,
+          name: m.name,
+          nasa_jpl_url: '',
+          absolute_magnitude_h: 0,
+          estimated_diameter: {},
+          is_potentially_hazardous_asteroid: false,
+          close_approach_data: [],
+          is_sentry_object: false,
+        }))
+      }
+      return asteroids.value
+    }
+
+    // Non-empty query: prefer returning lightweight catalog matches (name + id)
     if (catalog.value.length > 0) {
       const matches = catalog.value.filter((c) => c.name.toLowerCase().includes(lowercaseQuery) || c.id.includes(lowercaseQuery))
       return matches.map((m) => ({
@@ -187,8 +223,21 @@ export function useAsteroids() {
         neo_reference_id: String(id),
         name,
         nasa_jpl_url: obj?.spk_url || obj?.jpl_url || '',
-        absolute_magnitude_h: Number(obj?.H || 0),
-        estimated_diameter: {},
+        absolute_magnitude_h: Number(obj?.H || obj?.magnitude_h || obj?.absolute_magnitude_h || 0),
+        estimated_diameter: {
+          kilometers: obj?.diameter_km ? {
+            estimated_diameter_min: Number(obj?.diameter_km) * 0.9, // Estimate range as ±10%
+            estimated_diameter_max: Number(obj?.diameter_km) * 1.1
+          } : undefined,
+          meters: obj?.diameter_km ? {
+            estimated_diameter_min: Number(obj?.diameter_km) * 900, // Convert km to m
+            estimated_diameter_max: Number(obj?.diameter_km) * 1100
+          } : undefined,
+          feet: obj?.diameter_km ? {
+            estimated_diameter_min: Number(obj?.diameter_km) * 2952.76, // Convert km to feet
+            estimated_diameter_max: Number(obj?.diameter_km) * 3608.92
+          } : undefined
+        },
         is_potentially_hazardous_asteroid: Boolean(obj?.is_potentially_hazardous_asteroid || false),
         close_approach_data: [],
         is_sentry_object: false,
@@ -219,8 +268,16 @@ export function useAsteroids() {
           const neoResp = await fetchNeoDetails(String(id))
           try {
             const mapped = mapNeoToAsteroid(neoResp)
-            // Merge fields from NEO response into our asteroid object.
-            asteroid = { ...asteroid, ...mapped }
+            // Merge fields from NEO response into our asteroid object, preferring NEO values
+            // for diameter and magnitude when available
+            asteroid = {
+              ...asteroid,
+              ...mapped,
+              estimated_diameter: mapped.estimated_diameter && Object.keys(mapped.estimated_diameter).length > 0
+                ? mapped.estimated_diameter 
+                : asteroid.estimated_diameter,
+              absolute_magnitude_h: mapped.absolute_magnitude_h || asteroid.absolute_magnitude_h
+            }
             detailsCache.set(id, asteroid)
             console.log('NEO details (cached):', neoResp)
           } catch (e) {
