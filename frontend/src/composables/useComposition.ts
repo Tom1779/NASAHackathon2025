@@ -8,7 +8,7 @@ import type { Asteroid } from '../types/asteroid'
 // - DeMeo et al. (2009) - Bus-DeMeo taxonomy
 // - Asteroid composition estimates from meteorite samples and spectroscopy
 export const ASTEROID_COMPOSITIONS = {
-  // C-type (Carbonaceous) asteroids - ~75% of all asteroids
+  // C-type (Carbonaceous) asteroids - ~70% of all asteroids
   'C': {
     iron: 10,           // Low metal content
     nickel: 4,          // Associated with iron
@@ -18,6 +18,18 @@ export const ASTEROID_COMPOSITIONS = {
     silicates: 25,      // Rocky material
     other: 4,           // Other trace materials (no precious metals)
     displayName: 'Carbonaceous'
+  },
+  
+  // B-type (Low-albedo Carbonaceous) asteroids - ~5% of all asteroids
+  'B': {
+    iron: 8,            // Lower metal content than C-type
+    nickel: 3,          // Associated with iron
+    cobalt: 1.5,        // Lower industrial metal
+    water: 25,          // Higher water content (more hydrated)
+    carbon: 40,         // Higher carbon content
+    silicates: 20,      // Lower silicate content
+    other: 2.5,         // Lower trace materials
+    displayName: 'Low-Albedo Carbonaceous'
   },
   
   // S-type (Silicaceous/Stony) asteroids - ~17% of all asteroids
@@ -104,8 +116,39 @@ export function getAsteroidComposition(asteroid: Asteroid) {
     }
   }
   
-  // Fallback to unknown composition
-  return ASTEROID_COMPOSITIONS.Unknown
+  // Return null for unknown types - will be handled by getPossibleCompositions
+  return null
+}
+
+/**
+ * Get all possible compositions for unknown asteroids
+ */
+export function getPossibleCompositions() {
+  // Return all known spectral type compositions (excluding Unknown)
+  const compositions = Object.entries(ASTEROID_COMPOSITIONS)
+    .filter(([key]) => key !== 'Unknown')
+    .map(([key, composition]) => ({
+      spectralType: key,
+      composition,
+      probability: getSpectralTypeProbability(key)
+    }))
+    .sort((a, b) => b.probability - a.probability) // Sort by probability
+  
+  return compositions
+}
+
+/**
+ * Get statistical probability of spectral types (based on asteroid belt distribution)
+ */
+function getSpectralTypeProbability(type: string): number {
+  const probabilities: Record<string, number> = {
+    'C': 70, // ~70% of asteroids are C-type
+    'S': 17, // ~17% are S-type  
+    'M': 7,  // ~7% are M-type
+    'B': 5,  // ~5% are B-type
+    'V': 1   // ~1% are V-type (rare)
+  }
+  return probabilities[type] || 0
 }
 
 /**
@@ -113,7 +156,7 @@ export function getAsteroidComposition(asteroid: Asteroid) {
  */
 export function getCompositionDisplayName(asteroid: Asteroid): string {
   const composition = getAsteroidComposition(asteroid)
-  return composition.displayName
+  return composition ? composition.displayName : 'Composition Unknown'
 }
 
 /**
@@ -135,8 +178,19 @@ export function useComposition(asteroid: Asteroid) {
   
   const spectralType = computed(() => getSpectralType(asteroid))
   
+  const isUnknown = computed(() => composition.value === null)
+  
+  const possibleCompositions = computed(() => {
+    if (isUnknown.value) {
+      return getPossibleCompositions()
+    }
+    return []
+  })
+  
   const materials = computed(() => {
     const comp = composition.value
+    if (!comp) return []
+    
     return Object.entries(comp)
       .filter(([key]) => key !== 'displayName')
       .map(([material, percentage]) => ({
@@ -151,6 +205,8 @@ export function useComposition(asteroid: Asteroid) {
     composition,
     displayName,
     spectralType,
+    isUnknown,
+    possibleCompositions,
     materials
   }
 }
