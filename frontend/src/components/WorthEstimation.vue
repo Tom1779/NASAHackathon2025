@@ -379,47 +379,47 @@ const formatPercentage = (percentage: string | number): string => {
 // Get the spectral type from asteroid data
 const getSpectralType = (): string => {
   if (!props.selectedAsteroid) return 'Unknown'
-  
+
   // Try SMASSII first, then Tholen classification
-  const spectralType = props.selectedAsteroid.smassii_spectral_type || 
-                      props.selectedAsteroid.tholen_spectral_type
-  
+  const spectralType =
+    props.selectedAsteroid.smassii_spectral_type || props.selectedAsteroid.tholen_spectral_type
+
   if (spectralType) {
     // Extract the main type (first letter) for display
     return spectralType.charAt(0).toUpperCase()
   }
-  
+
   return 'Unknown'
 }
 
 // Get the display name for the spectral type
 const getSpectralTypeName = (): string => {
   if (!props.selectedAsteroid) return ''
-  
+
   const spectralType = getSpectralType()
-  
+
   if (spectralType === 'Unknown') return ''
-  
+
   // Get the display name from composition data
   const compositionData = composition.value?.composition.value
   if (compositionData && 'displayName' in compositionData) {
     return compositionData.displayName
   }
-  
+
   // Fallback display names
   const typeNames: Record<string, string> = {
-    'C': 'Carbonaceous',
-    'S': 'Stony',
-    'M': 'Metallic',
-    'B': 'Low-Albedo Carbonaceous',
-    'X': 'Metallic/M-type',
-    'V': 'Basaltic',
-    'A': 'Olivine-rich',
-    'D': 'Red, organic-rich',
-    'T': 'Trojan-type',
-    'P': 'Dark, reddish'
+    C: 'Carbonaceous',
+    S: 'Stony',
+    M: 'Metallic',
+    B: 'Low-Albedo Carbonaceous',
+    X: 'Metallic/M-type',
+    V: 'Basaltic',
+    A: 'Olivine-rich',
+    D: 'Red, organic-rich',
+    T: 'Trojan-type',
+    P: 'Dark, reddish',
   }
-  
+
   return typeNames[spectralType] || ''
 }
 </script>
