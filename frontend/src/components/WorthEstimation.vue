@@ -235,31 +235,6 @@
                   </div>
                 </div>
 
-                <!-- Material breakdown for this type -->
-                <div class="mt-4 space-y-2">
-                  <div class="text-gray-400 text-xs font-semibold uppercase tracking-wider mb-3">
-                    Material Composition
-                  </div>
-                  <div class="space-y-2">
-                    <div
-                      v-for="material in estimate.materials"
-                      :key="material.material"
-                      class="flex items-center justify-between p-3 bg-gradient-to-r from-gray-800/40 to-slate-800/40 rounded-lg border border-gray-600/30 hover:border-gray-500/50 transition-all"
-                    >
-                      <div class="flex items-center gap-3 flex-1 min-w-0">
-                        <div class="w-2 h-2 rounded-full bg-gray-400 flex-shrink-0"></div>
-                        <span class="text-gray-300 text-sm font-medium truncate">
-                          {{ material.info?.name || material.material }}
-                        </span>
-                      </div>
-                      <div
-                        class="text-white font-mono text-sm font-bold text-right ml-4 flex-shrink-0 w-24"
-                      >
-                        {{ formatPercentage(material.percentage) }}%
-                      </div>
-                    </div>
-                  </div>
-                </div>
               </div>
             </div>
 
