@@ -16,7 +16,7 @@
             :selected-asteroid="selectedAsteroid"
             :asteroids="asteroids"
             :loading-asteroids="loadingAsteroids"
-            @update:selected-asteroid="selectedAsteroid = $event"
+            @update:selected-asteroid="onSelectAsteroid"
             @analyze="onAnalyzeAsteroid"
             @search="onSearchAsteroids"
           />
@@ -93,27 +93,29 @@ onMounted(() => {
 })
 
 // Watch selectedAsteroid for lightweight picks and fetch full details when needed
-import { watch } from 'vue'
+// Handle explicit selection from the selector. We fetch full details via the
+// composable and only then update `selectedAsteroid`. This ensures SBDB and
+// NEO are invoked exactly once per user selection (and uses the composable's
+// cache to avoid repeats).
+const onSelectAsteroid = async (astro: Asteroid | null) => {
+  if (!astro) {
+    selectedAsteroid.value = null
+    return
+  }
 
-// When the user selects a catalog entry (which is lightweight), fetch fuller
-// details from SBDB using the spkid (id) and then call the NEO details API
-// using the same identifier to get any additional NEO-specific data. We log
-// the NEO response to the Chrome console as requested.
-watch(selectedAsteroid, async (val) => {
-  if (!val) return
-
-  // If the selected item looks like a lightweight catalog entry (no JPL url
-  // or zero magnitude), look up SBDB first to populate details.
-  if (!val.nasa_jpl_url || val.absolute_magnitude_h === 0) {
-    const full = await fetchDetailsForId(val.id)
+  // If this is a lightweight catalog entry (no JPL url or zero magnitude),
+  // fetch full details first using the SPKID. Otherwise, use the provided
+  // asteroid object as-is.
+  if (!astro.nasa_jpl_url || astro.absolute_magnitude_h === 0) {
+    const full = await fetchDetailsForId(astro.id)
     if (full) {
       selectedAsteroid.value = full
+      return
     }
   }
 
-  // NEO enrichment and caching are handled inside the composable's
-  // `fetchDetailsForId`, which we already call above. No further action here.
-})
+  selectedAsteroid.value = astro
+}
 </script>
 
 <style scoped>
