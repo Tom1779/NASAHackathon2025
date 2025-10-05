@@ -28,6 +28,7 @@ export class AsteroidScene {
   private asteroid: THREE.Mesh | null = null;
   private asteroidOrbit: THREE.Line | null = null;
   private asteroidTrajectory: THREE.Line | null = null;
+  private asteroidLabel: THREE.Sprite | null = null;
 
   // Animation
   private animationId: number | null = null;
@@ -222,6 +223,10 @@ export class AsteroidScene {
       this.scene.remove(this.asteroidTrajectory);
       this.asteroidTrajectory = null;
     }
+    if (this.asteroidLabel) {
+      this.scene.remove(this.asteroidLabel);
+      this.asteroidLabel = null;
+    }
 
     // Create asteroid mesh
     // Increased size multiplier for better visibility
@@ -292,12 +297,23 @@ export class AsteroidScene {
 
     const texture = new THREE.CanvasTexture(canvas);
     const spriteMaterial = new THREE.SpriteMaterial({ map: texture });
-    const sprite = new THREE.Sprite(spriteMaterial);
+    this.asteroidLabel = new THREE.Sprite(spriteMaterial);
 
-    sprite.position.set(position.x, position.y + 10, position.z);
-    sprite.scale.set(20, 5, 1);
+    this.asteroidLabel.position.set(position.x, position.y + 10, position.z);
+    this.asteroidLabel.scale.set(20, 5, 1);
 
-    this.scene.add(sprite);
+    this.scene.add(this.asteroidLabel);
+  }
+
+  private updateLabelPosition(): void {
+    if (this.asteroidLabel && this.asteroid) {
+      // Position the label slightly above the asteroid
+      this.asteroidLabel.position.set(
+        this.asteroid.position.x,
+        this.asteroid.position.y + 15, // Offset above the asteroid
+        this.asteroid.position.z
+      );
+    }
   }
 
   private fitCameraToOrbit(elements: OrbitalElements): void {
@@ -428,6 +444,9 @@ export class AsteroidScene {
         position.z * this.SCALE,
         position.y * this.SCALE
       );
+
+      // Update label position to follow the asteroid
+      this.updateLabelPosition();
     }
   }
 }
