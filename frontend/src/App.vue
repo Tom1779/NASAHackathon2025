@@ -1,10 +1,13 @@
 <template>
   <div id="app" class="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
     <!-- Header Component -->
-    <AppHeader />
+    <AppHeader @navigate="currentPage = $event" />
+
+    <!-- About Page -->
+    <AboutPage v-if="currentPage === 'about'" />
 
     <!-- Main Content -->
-    <main class="container mx-auto p-6">
+    <main v-else class="container mx-auto p-6">
       <!-- Top Section: Asteroid Selection & 3D Simulation -->
       <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
         <!-- Asteroid Selector -->
@@ -42,6 +45,7 @@ import { ref, onMounted } from 'vue'
 
 // Import components
 import AppHeader from './components/AppHeader.vue'
+import AboutPage from './components/AboutPage.vue'
 import AsteroidSelector from './components/AsteroidSelector.vue'
 import AsteroidSimulation from './components/AsteroidSimulation.vue'
 import AsteroidDetails from './components/AsteroidDetails.vue'
@@ -56,6 +60,7 @@ import type { Asteroid } from './types/asteroid'
 const { asteroids, loading: loadingAsteroids, fetchAsteroids, searchAsteroids, fetchDetailsForId } = useAsteroids()
 
 // Reactive data
+const currentPage = ref<'home' | 'about'>('home')
 const selectedAsteroid = ref<Asteroid | null>(null)
 
 // Event handlers

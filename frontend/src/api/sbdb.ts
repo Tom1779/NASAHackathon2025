@@ -11,7 +11,7 @@ export interface SbdbResponse {
 // We proxy /api/sbdb locally to the above via Vite dev server.
 export const fetchSmallBodyData = async (objectId: string): Promise<SbdbResponse> => {
     try {
-        const params = { sstr: objectId };
+        const params = { sstr: objectId, 'phys-par': 1 };
         const url = `/api/sbdb`;
         console.log('Sending request to SBDB API:', { url, params });
         const response = await axios.get(url, { params });
