@@ -124,7 +124,7 @@ export class AsteroidScene {
   }
 
   private addSun(): void {
-    const sunGeometry = new THREE.SphereGeometry(10, 32, 32)
+    const sunGeometry = new THREE.SphereGeometry(10, 32, 32)//10 32 32
     const sunMaterial = new THREE.MeshBasicMaterial({
       color: 0xffff00,
     })
@@ -132,7 +132,7 @@ export class AsteroidScene {
     this.scene.add(this.sun)
 
     // Add sun glow
-    const glowGeometry = new THREE.SphereGeometry(12, 32, 32)
+    const glowGeometry = new THREE.SphereGeometry(12, 32, 32)//12 32 32
     const glowMaterial = new THREE.MeshBasicMaterial({
       color: 0xffaa00,
       transparent: true,
@@ -144,10 +144,10 @@ export class AsteroidScene {
 
   private addEarth(): void {
     // Earth sphere
-    const earthGeometry = new THREE.SphereGeometry(3, 32, 32)
+    const earthGeometry = new THREE.SphereGeometry(3, 32, 32)// 3, 32, 32
     const earthMaterial = new THREE.MeshStandardMaterial({
-      color: 0x2233ff,
-      emissive: 0x112244,
+      color: 0x009911,//  0x2233ff
+      emissive: 0x005511, //0x112244
       roughness: 0.8,
       metalness: 0.2,
     })
@@ -231,7 +231,7 @@ export class AsteroidScene {
 
     // Create asteroid mesh
     // Increased size multiplier for better visibility
-    const size = Math.max(5, Math.min(diameter / 20, 15)) // Scale based on diameter (5-15 units)
+    const size = Math.max(3, Math.min(diameter / 20, 15)) // Scale based on diameter (5-15 units)
     const asteroidGeometry = new THREE.SphereGeometry(size, 16, 16)
     const asteroidMaterial = new THREE.MeshBasicMaterial({
       color: 0xffffff, // White for high visibility, unaffected by lighting
