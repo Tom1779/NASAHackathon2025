@@ -186,7 +186,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onUnmounted } from 'vue'
 import Card from 'primevue/card'
 import Select from 'primevue/select'
 import Button from 'primevue/button'
@@ -214,6 +214,7 @@ const emit = defineEmits<Emits>()
 const searchQuery = ref('')
 const isSearchFocused = ref(false)
 const loadingSearch = ref(false)
+let searchDebounceHandle: ReturnType<typeof setTimeout> | null = null
 const currentPage = ref(1)
 const itemsPerPage = 20
 
@@ -247,8 +248,8 @@ const sortOptions = [
 
 // Computed properties
 const hasFilters = computed(() => {
-  return (filters.value.hazardous && filters.value.hazardous !== 'All') || 
-         filters.value.sizeRange !== null || 
+  return (filters.value.hazardous && filters.value.hazardous !== 'All') ||
+         filters.value.sizeRange !== null ||
          filters.value.sortBy !== 'name'
 })
 
@@ -258,7 +259,7 @@ const filteredAsteroids = computed(() => {
   // Apply search filter
   if (searchQuery.value) {
     const query = searchQuery.value.toLowerCase()
-    filtered = filtered.filter(asteroid => 
+    filtered = filtered.filter(asteroid =>
       asteroid.name.toLowerCase().includes(query) ||
       asteroid.id.includes(query) ||
       asteroid.neo_reference_id.includes(query)
@@ -321,13 +322,15 @@ const paginatedResults = computed(() => {
 })
 
 // Methods
-const onSearchInput = async () => {
+const onSearchInput = () => {
+  if (searchDebounceHandle !== null) {
+    clearTimeout(searchDebounceHandle)
+  }
+
   loadingSearch.value = true
   currentPage.value = 1
-  
-  // Debounce search
-  setTimeout(() => {
-    loadingSearch.value = false
+
+  searchDebounceHandle = setTimeout(() => {
     emit('search', searchQuery.value)
   }, 300)
 }
@@ -352,7 +355,7 @@ const selectAsteroid = (asteroid: Asteroid) => {
   filters.value.sortBy = 'name'
   currentPage.value = 1
   isSearchFocused.value = false
-  
+
   // Scroll to top of page
   window.scrollTo({
     top: 0,
@@ -385,4 +388,15 @@ const showHazardousOnly = () => {
 watch([filters, searchQuery], () => {
   currentPage.value = 1
 }, { deep: true })
+
+watch(() => props.loadingAsteroids, (isLoading) => {
+  loadingSearch.value = isLoading && (isSearchFocused.value || Boolean(searchQuery.value))
+})
+
+onUnmounted(() => {
+  if (searchDebounceHandle !== null) {
+    clearTimeout(searchDebounceHandle)
+    searchDebounceHandle = null
+  }
+})
 </script>
