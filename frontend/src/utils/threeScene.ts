@@ -237,12 +237,17 @@ export class AsteroidScene {
 
     // Create asteroid mesh
     // Increased size multiplier for better visibility
-    const size = Math.max(3, Math.min(diameter / 20, 15)) // Scale based on diameter (5-15 units)
-    const asteroidGeometry = new THREE.SphereGeometry(size, 16, 16)
+
+   const textureLoader = new THREE.TextureLoader();
+    const asteroidTexture = textureLoader.load('textures/asteroid.jpg');
+
+    const size = Math.max(3, Math.min(diameter / 20, 15)); // Scale based on diameter
+    const asteroidGeometry = new THREE.SphereGeometry(size, 16, 16);
     const asteroidMaterial = new THREE.MeshBasicMaterial({
-      color: 0xffffff, // White for high visibility, unaffected by lighting
-    })
-    this.asteroid = new THREE.Mesh(asteroidGeometry, asteroidMaterial)
+      map: asteroidTexture, // <-- texture applied here
+    });
+
+    this.asteroid = new THREE.Mesh(asteroidGeometry, asteroidMaterial);
 
     // Position asteroid at current mean anomaly
     const position = orbitalElementsToPosition(elements)
