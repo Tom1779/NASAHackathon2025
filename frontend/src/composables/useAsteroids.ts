@@ -45,7 +45,8 @@ interface SbdbResponse {
   [key: string]: unknown
 }
 
-const CATALOG_PAGE_SIZE = 120
+// Load all NEO asteroids from catalog (now filtered to ~40K NEO-only entries)
+const CATALOG_PAGE_SIZE = 50000
 
 const toNumber = (value: unknown, fallback = 0): number => {
   if (value === undefined || value === null || value === '') return fallback
