@@ -7,7 +7,6 @@ import {
   catalogEntriesToAsteroids,
   preloadCatalog,
 } from '../utils/catalogLoader'
-import { useAsteroidCache } from './useAsteroidCache';
 
 interface NeoApiDiameterRange {
   estimated_diameter_min?: number | string
@@ -155,19 +154,15 @@ const extractPhysParam = (params: SbdbPhysicalParam[], name: string): unknown =>
   params.find(param => param.name === name)?.value
 
 export function useAsteroids() {
-  const { cachedAsteroids, isCacheLoaded, saveCache } = useAsteroidCache();
   const asteroids: Ref<Asteroid[]> = ref([])
   const loading = ref(false)
   const error = ref<string | null>(null)
-
 
   // NEO Browse state
   const neoPage = ref(0)
   const neoHasMore = ref(true)
   const neoQuery = ref('')
   const neoInitialized = ref(false)
-  const isLoadingAll = ref(false)
-  const allDataLoaded = ref(false)
 
   // Legacy catalog state (kept for compatibility)
   const catalogQuery = ref('')
@@ -235,20 +230,20 @@ export function useAsteroids() {
       let data;
       if (neoQuery.value) {
         // If there's a search query, use search function
-        data = await searchNeos(neoQuery.value, 0, 100)
+        data = await searchNeos(neoQuery.value, 0, 20)
       } else {
         // If no query, just browse normally
-        data = await fetchNeoBrowsePage(0, 100)
+        data = await fetchNeoBrowsePage(0, 20)
       }
-
+      
       const items = data.near_earth_objects || []
       asteroids.value = items.map(mapNeoToAsteroid)
-
+      
       // Update pagination state based on API response
       const pageInfo = data.page || {}
       neoHasMore.value = (pageInfo.number || 0) < (pageInfo.total_pages || 1) - 1
       neoInitialized.value = true
-
+      
       console.log('NEO search result:', {
         query: neoQuery.value,
         page: pageInfo.number || 0,
@@ -256,7 +251,7 @@ export function useAsteroids() {
         hasMore: neoHasMore.value,
         itemsCount: items.length
       })
-
+      
       return asteroids.value
     } catch (err) {
       console.error('NEO search failed:', err)
@@ -276,30 +271,30 @@ export function useAsteroids() {
     }
 
     loading.value = true
-
+    
     try {
       const nextPage = neoPage.value + 1
-
+      
       let data;
       if (neoQuery.value) {
         // If there's a search query, continue with search
-        data = await searchNeos(neoQuery.value, nextPage, 100)
+        data = await searchNeos(neoQuery.value, nextPage, 20)
       } else {
         // If no query, just browse the next page
-        data = await fetchNeoBrowsePage(nextPage, 100)
+        data = await fetchNeoBrowsePage(nextPage, 20)
       }
-
+      
       const items = data.near_earth_objects || []
-
+      
       // Append new items (don't replace existing ones)
       const newAsteroids = items.map(mapNeoToAsteroid)
       asteroids.value = [...asteroids.value, ...newAsteroids]
-
+      
       // Update pagination state
       neoPage.value = nextPage
       const pageInfo = data.page || {}
       neoHasMore.value = nextPage < (pageInfo.total_pages || 1) - 1
-
+      
       console.log('Load more result:', {
         page: nextPage,
         totalPages: pageInfo.total_pages || 1,
@@ -307,7 +302,7 @@ export function useAsteroids() {
         newItemsCount: items.length,
         totalItemsCount: asteroids.value.length
       })
-
+      
       return asteroids.value
     } catch (err) {
       console.error('Load more NEOs failed:', err)
@@ -315,67 +310,6 @@ export function useAsteroids() {
       throw err
     } finally {
       loading.value = false
-    }
-  }
-
-  /**
-   * Load all remaining data automatically in the background.
-   * This function will recursively fetch all pages until complete.
-   */
-  const loadAllDataInBackground = async (): Promise<void> => {
-    if (isLoadingAll.value || allDataLoaded.value) {
-      return
-    }
-
-    if (isCacheLoaded.value) {
-      asteroids.value = cachedAsteroids.value;
-      allDataLoaded.value = true;
-      neoHasMore.value = false;
-      console.log('Loaded all asteroids from cache.');
-      return;
-    }
-
-    isLoadingAll.value = true
-    console.log('Starting background load of all NEO data...')
-
-
-    try {
-      while (neoHasMore.value) {
-        await loadMoreAsteroidsNeo()
-
-        // Small delay to avoid hammering the API
-        await new Promise(resolve => setTimeout(resolve, 100))
-      }
-
-      allDataLoaded.value = true
-      saveCache(asteroids.value);
-      console.log(`Background load complete! Total asteroids loaded: ${asteroids.value.length}`)
-    } catch (err) {
-      console.error('Background loading failed:', err)
-      // Don't throw - let the user continue with partial data
-    } finally {
-      isLoadingAll.value = false
-    }
-  }
-
-  /**
-   * Wait for all data to be loaded. Use this before search operations.
-   */
-  const waitForAllData = async (): Promise<void> => {
-    if (allDataLoaded.value) {
-      return
-    }
-
-    console.log('Waiting for all data to load...')
-
-    // If background loading hasn't started, start it
-    if (!isLoadingAll.value) {
-      await loadAllDataInBackground()
-    } else {
-      // Wait for existing background load to complete
-      while (isLoadingAll.value) {
-        await new Promise(resolve => setTimeout(resolve, 200))
-      }
     }
   }
 
@@ -542,8 +476,6 @@ export function useAsteroids() {
     neoHasMore,
     neoQuery,
     neoInitialized,
-    isLoadingAll,
-    allDataLoaded,
     // Legacy catalog state (for compatibility)
     catalogQuery,
     catalogHasMore,
@@ -554,8 +486,6 @@ export function useAsteroids() {
     loadMoreAsteroids,
     searchAsteroidsNeo,
     loadMoreAsteroidsNeo,
-    loadAllDataInBackground,
-    waitForAllData,
     fetchDetailsForId,
     ensureCatalogPrefetched,
   }
