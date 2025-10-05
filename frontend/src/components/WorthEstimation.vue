@@ -17,7 +17,7 @@
       <template #content>
         <div class="space-y-6">
           <!-- Main Metrics Row -->
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
             <!-- Total Value -->
             <div
               class="bg-gradient-to-br from-emerald-900/40 to-green-800/40 p-6 rounded-xl border border-emerald-500/30 shadow-lg"
@@ -59,6 +59,27 @@
                 {{
                   calculations?.formatValue(calculations.asterankProfitValue?.value || 0) || '$0'
                 }}
+              </div>
+            </div>
+
+            <!-- Spectral Type -->
+            <div
+              class="bg-gradient-to-br from-amber-900/40 to-yellow-800/40 p-6 rounded-xl border border-amber-500/30 shadow-lg"
+            >
+              <div class="flex items-center gap-3 mb-3">
+                <i class="pi pi-tag text-amber-400 text-2xl"></i>
+                <div>
+                  <h3 class="text-amber-400 text-sm font-semibold uppercase tracking-wide">
+                    Spectral Type
+                  </h3>
+                  <p class="text-amber-300/70 text-xs">Asteroid classification</p>
+                </div>
+              </div>
+              <div class="text-white text-3xl font-bold">
+                {{ getSpectralType() }}
+              </div>
+              <div v-if="getSpectralTypeName()" class="text-amber-300/70 text-sm mt-2">
+                {{ getSpectralTypeName() }}
               </div>
             </div>
           </div>
@@ -353,5 +374,52 @@ const formatPercentage = (percentage: string | number): string => {
   if (num > 0) return num.toFixed(4)
 
   return '0.0'
+}
+
+// Get the spectral type from asteroid data
+const getSpectralType = (): string => {
+  if (!props.selectedAsteroid) return 'Unknown'
+  
+  // Try SMASSII first, then Tholen classification
+  const spectralType = props.selectedAsteroid.smassii_spectral_type || 
+                      props.selectedAsteroid.tholen_spectral_type
+  
+  if (spectralType) {
+    // Extract the main type (first letter) for display
+    return spectralType.charAt(0).toUpperCase()
+  }
+  
+  return 'Unknown'
+}
+
+// Get the display name for the spectral type
+const getSpectralTypeName = (): string => {
+  if (!props.selectedAsteroid) return ''
+  
+  const spectralType = getSpectralType()
+  
+  if (spectralType === 'Unknown') return ''
+  
+  // Get the display name from composition data
+  const compositionData = composition.value?.composition.value
+  if (compositionData && 'displayName' in compositionData) {
+    return compositionData.displayName
+  }
+  
+  // Fallback display names
+  const typeNames: Record<string, string> = {
+    'C': 'Carbonaceous',
+    'S': 'Stony',
+    'M': 'Metallic',
+    'B': 'Low-Albedo Carbonaceous',
+    'X': 'Metallic/M-type',
+    'V': 'Basaltic',
+    'A': 'Olivine-rich',
+    'D': 'Red, organic-rich',
+    'T': 'Trojan-type',
+    'P': 'Dark, reddish'
+  }
+  
+  return typeNames[spectralType] || ''
 }
 </script>
