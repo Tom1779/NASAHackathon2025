@@ -8,12 +8,14 @@
         </h1>
       </div>
       <div class="flex items-center gap-4">
-        <button 
+        <Button 
           @click="$emit('navigate', 'about')"
-          class="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors text-sm font-medium"
-        >
-          About
-        </button>
+          icon="pi pi-info-circle"
+          label="About"
+          class="transparent-button"
+          text
+          size="small"
+        />
         <div class="text-purple-300 text-sm">NASA Space Apps Challenge 2025</div>
       </div>
     </div>
@@ -21,8 +23,27 @@
 </template>
 
 <script setup lang="ts">
+import Button from 'primevue/button'
+
 // Define emits for navigation
 defineEmits<{
   navigate: [page: 'home' | 'about']
 }>()
 </script>
+
+<style scoped>
+.transparent-button {
+  background: transparent !important;
+  border: none !important;
+  color: rgb(196 181 253) !important; /* text-purple-300 */
+}
+
+.transparent-button:hover {
+  background: rgba(147, 51, 234, 0.1) !important;
+  color: rgb(96 165 250) !important; /* text-blue-400 */
+}
+
+.transparent-button:focus {
+  box-shadow: none !important;
+}
+</style>
