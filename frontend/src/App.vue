@@ -16,9 +16,11 @@
             :selected-asteroid="selectedAsteroid"
             :asteroids="asteroids"
             :loading-asteroids="loadingAsteroids"
+            :has-more-neo-results="neoHasMore"
             @update:selected-asteroid="onSelectAsteroid"
             @analyze="onAnalyzeAsteroid"
             @search="onSearchAsteroids"
+            @load-more="onLoadMoreAsteroids"
           />
         </div>
 
@@ -60,7 +62,9 @@ import type { Asteroid } from './types/asteroid'
 const {
   asteroids,
   loading: loadingAsteroids,
+  neoHasMore,
   searchAsteroids,
+  loadMoreAsteroids,
   fetchDetailsForId,
   ensureCatalogPrefetched,
 } = useAsteroids()
@@ -77,28 +81,33 @@ const onAnalyzeAsteroid = (asteroid: Asteroid) => {
 }
 
 const onSearchAsteroids = async (query: string) => {
-  // Route the selector's search into our composable catalog search so results
-  // come from the CSV (no NEO queries until selection).
-  console.log('Searching asteroids (catalog):', query)
+  // Route the selector's search into our NEO browse API
+  console.log('Searching asteroids (NEO browse):', query)
   try {
     await searchAsteroids(query)
   } catch (e) {
-    console.warn('Catalog search failed, leaving asteroids list unchanged', e)
+    console.warn('NEO search failed, leaving asteroids list unchanged', e)
+  }
+}
+
+const onLoadMoreAsteroids = async () => {
+  console.log('Loading more asteroids from NEO browse API')
+  try {
+    await loadMoreAsteroids()
+  } catch (e) {
+    console.warn('Load more asteroids failed:', e)
   }
 }
 
 // Lifecycle
-// When the app mounts, load the lightweight catalog + initial data placeholder
-// Do NOT fetch the full NEO feed on mount. We'll show the CSV catalog and
-// only query SBDB/NEO when the user selects an entry.
+// When the app mounts, load the initial NEO data from the browse endpoint
 onMounted(async () => {
-  // Populate the selector with the full CSV catalog initially
-  // by performing an empty search which returns the catalog mapping.
+  // Populate the selector with NEO browse data initially
   try {
     await ensureCatalogPrefetched()
     await searchAsteroids('')
   } catch (e) {
-    console.debug('Initial catalog load skipped', e)
+    console.debug('Initial NEO load failed', e)
   }
 })
 

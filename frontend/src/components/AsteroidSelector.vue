@@ -18,7 +18,7 @@
             :placeholder="selectedAsteroid ? `Selected: ${selectedAsteroid.name}` : 'Type asteroid name or ID...'"
             class="w-full"
             @input="onSearchInput"
-            @focus="isSearchFocused = true"
+            @focus="onSearchFocus"
             @blur="onSearchBlur"
           />
         </div>
@@ -62,7 +62,12 @@
         </div>
 
         <!-- Search Results -->
-        <div v-if="isSearchFocused || searchQuery || hasFilters" class="max-h-64 overflow-y-auto border border-purple-500/30 rounded-lg relative z-10">
+        <div 
+          v-if="shouldShowDropdown" 
+          class="search-results-dropdown max-h-64 overflow-y-auto border border-purple-500/30 rounded-lg relative z-10" 
+          @click.stop 
+          @mousedown="keepDropdownOpen"
+        >
           <div v-if="loadingSearch" class="p-4 text-center text-purple-300">
             <i class="pi pi-spin pi-spinner mr-2"></i>
             Searching...
@@ -96,29 +101,69 @@
                 Magnitude: {{ asteroid.absolute_magnitude_h }}
               </div>
             </div>
-            <!-- Pagination -->
-            <div v-if="totalPages > 1" class="p-3 border-t border-purple-500/30 flex justify-between items-center">
-              <Button
-                :disabled="currentPage === 1"
-                @click="currentPage--"
-                size="small"
-                severity="secondary"
-                outlined
-              >
-                <i class="pi pi-chevron-left"></i>
-              </Button>
-              <span class="text-xs text-purple-300">
-                Page {{ currentPage }} of {{ totalPages }} ({{ filteredAsteroids.length }} results)
-              </span>
-              <Button
-                :disabled="currentPage === totalPages"
-                @click="currentPage++"
-                size="small"
-                severity="secondary"
-                outlined
-              >
-                <i class="pi pi-chevron-right"></i>
-              </Button>
+            <!-- Pagination and Load More -->
+            <div class="p-3 border-t border-purple-500/30">
+              <!-- Local pagination for current results -->
+              <div v-if="totalPages > 1" class="pagination-controls flex justify-between items-center mb-3">
+                <Button
+                  :disabled="currentPage === 1"
+                  @click="goToPage(currentPage - 1); keepDropdownOpen()"
+                  @mousedown="keepDropdownOpen"
+                  size="small"
+                  severity="secondary"
+                  outlined
+                  class="pagination-btn"
+                >
+                  <i class="pi pi-chevron-left"></i>
+                </Button>
+                <span class="text-xs text-purple-300">
+                  Page {{ currentPage }} of {{ totalPages }}
+                  <br class="block sm:hidden">
+                  <span class="text-purple-400">
+                    ({{ filteredAsteroids.length }} loaded{{ props.hasMoreNeoResults ? ', more available' : '' }})
+                  </span>
+                </span>
+                <Button
+                  :disabled="currentPage === totalPages && !props.hasMoreNeoResults"
+                  @click="goToPage(currentPage + 1); keepDropdownOpen()"
+                  @mousedown="keepDropdownOpen"
+                  :loading="loadingMore && currentPage === totalPages"
+                  size="small"
+                  severity="secondary"
+                  outlined
+                  class="pagination-btn"
+                >
+                  <i class="pi pi-chevron-right" v-if="!loadingMore || currentPage !== totalPages"></i>
+                  <i class="pi pi-spin pi-spinner" v-if="loadingMore && currentPage === totalPages"></i>
+                </Button>
+              </div>
+              
+              <!-- API Results summary -->
+              <div v-if="filteredAsteroids.length > 0" class="text-xs text-purple-400 mb-2 text-center">
+                {{ filteredAsteroids.length }} asteroids loaded
+                <span v-if="hasMoreNeoResults"> • More available from NASA</span>
+              </div>
+              
+              <!-- Manual Load More (secondary option) -->
+              <div v-if="hasMoreNeoResults && !loadingMore" class="flex justify-center load-more-button">
+                <Button
+                  @click="loadMoreFromNeo(); keepDropdownOpen()"
+                  @mousedown="keepDropdownOpen"
+                  :disabled="loadingAsteroids"
+                  size="small"
+                  severity="secondary"
+                  text
+                  class="text-xs"
+                >
+                  <i class="pi pi-plus mr-1"></i>
+                  Load More Now
+                </Button>
+              </div>
+              
+              <!-- No more results message -->
+              <div v-else-if="filteredAsteroids.length > 0" class="text-xs text-purple-400 text-center py-2">
+                All available results loaded
+              </div>
             </div>
           </div>
         </div>
@@ -186,7 +231,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onUnmounted } from 'vue'
+import { ref, computed, watch, onUnmounted, nextTick } from 'vue'
 import Card from 'primevue/card'
 import Select from 'primevue/select'
 import Button from 'primevue/button'
@@ -199,12 +244,14 @@ interface Props {
   selectedAsteroid: Asteroid | null
   asteroids: Asteroid[]
   loadingAsteroids: boolean
+  hasMoreNeoResults?: boolean
 }
 
 interface Emits {
   (e: 'update:selectedAsteroid', asteroid: Asteroid | null): void
   (e: 'analyze', asteroid: Asteroid): void
   (e: 'search', query: string): void
+  (e: 'loadMore'): void
 }
 
 const props = defineProps<Props>()
@@ -214,6 +261,9 @@ const emit = defineEmits<Emits>()
 const searchQuery = ref('')
 const isSearchFocused = ref(false)
 const loadingSearch = ref(false)
+const loadingMore = ref(false)
+const showDropdown = ref(false)
+const resultsContainer = ref<HTMLElement | null>(null)
 let searchDebounceHandle: ReturnType<typeof setTimeout> | null = null
 const currentPage = ref(1)
 const itemsPerPage = 20
@@ -251,6 +301,10 @@ const hasFilters = computed(() => {
   return (filters.value.hazardous && filters.value.hazardous !== 'All') ||
          filters.value.sizeRange !== null ||
          filters.value.sortBy !== 'name'
+})
+
+const shouldShowDropdown = computed(() => {
+  return showDropdown.value || isSearchFocused.value || searchQuery.value || hasFilters.value
 })
 
 const filteredAsteroids = computed(() => {
@@ -312,12 +366,37 @@ const filteredAsteroids = computed(() => {
 })
 
 const totalPages = computed(() => {
-  return Math.ceil(filteredAsteroids.value.length / itemsPerPage)
+  const totalItems = filteredAsteroids.value.length
+  const localPages = Math.ceil(totalItems / itemsPerPage)
+  
+  // If we have more data available from NASA API, add extra pages
+  if (props.hasMoreNeoResults) {
+    return localPages + 3 // Show 3 additional pages that will trigger API loads
+  }
+  
+  return Math.max(localPages, 1)
 })
 
 const paginatedResults = computed(() => {
+  const totalItems = filteredAsteroids.value.length
   const start = (currentPage.value - 1) * itemsPerPage
   const end = start + itemsPerPage
+  
+  // Check if we need more data from API
+  const needsMoreData = end > totalItems && props.hasMoreNeoResults
+  
+  if (needsMoreData) {
+    // Trigger load more in next tick to avoid computed side effects
+    nextTick(() => {
+      if (!loadingMore.value && props.hasMoreNeoResults) {
+        loadMoreFromNeo()
+      }
+    })
+    
+    // Return what we have for now
+    return filteredAsteroids.value.slice(start, totalItems)
+  }
+  
   return filteredAsteroids.value.slice(start, end)
 })
 
@@ -335,11 +414,31 @@ const onSearchInput = () => {
   }, 300)
 }
 
-const onSearchBlur = () => {
+const onSearchFocus = () => {
+  isSearchFocused.value = true
+  showDropdown.value = true
+}
+
+const onSearchBlur = (event?: FocusEvent) => {
+  // Don't close if clicking on pagination or load more buttons
+  const relatedTarget = event?.relatedTarget as HTMLElement
+  if (relatedTarget?.closest('.pagination-controls') || 
+      relatedTarget?.closest('.load-more-button') ||
+      relatedTarget?.closest('.search-results-dropdown')) {
+    return
+  }
+  
   // Delay hiding the results to allow clicks on them
   setTimeout(() => {
     isSearchFocused.value = false
+    if (!searchQuery.value && !hasFilters.value) {
+      showDropdown.value = false
+    }
   }, 150)
+}
+
+const keepDropdownOpen = () => {
+  showDropdown.value = true
 }
 
 const applyFilters = () => {
@@ -355,6 +454,7 @@ const selectAsteroid = (asteroid: Asteroid) => {
   filters.value.sortBy = 'name'
   currentPage.value = 1
   isSearchFocused.value = false
+  showDropdown.value = false
 
   // Scroll to top of page
   window.scrollTo({
@@ -382,6 +482,32 @@ const showRandomAsteroid = () => {
 const showHazardousOnly = () => {
   filters.value.hazardous = 'Hazardous Only'
   applyFilters()
+}
+
+const loadMoreFromNeo = async () => {
+  if (loadingMore.value) return
+  
+  loadingMore.value = true
+  try {
+    emit('loadMore')
+  } catch (error) {
+    console.error('Failed to load more asteroids:', error)
+  } finally {
+    loadingMore.value = false
+  }
+}
+
+// Auto-load more data when user navigates to a page that needs more data
+const goToPage = async (page: number) => {
+  const requiredItems = page * itemsPerPage
+  const currentItems = filteredAsteroids.value.length
+  
+  // If we need more items and API has more data, load it first
+  if (requiredItems > currentItems && props.hasMoreNeoResults && !loadingMore.value) {
+    await loadMoreFromNeo()
+  }
+  
+  currentPage.value = page
 }
 
 // Watch for filter changes to reset pagination
