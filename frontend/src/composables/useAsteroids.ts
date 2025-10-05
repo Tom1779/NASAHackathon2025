@@ -173,6 +173,13 @@ export function useAsteroids() {
       const obj = sbdbResp?.object || sbdbResp || {}
       const name = obj?.full_name || obj?.fullname || obj?.fullName || obj?.designation || `ID ${id}`
 
+      // Extract composition data from physical parameters if available
+      const physPar = sbdbResp?.phys_par || []
+      const tholenType = physPar.find((p: any) => p.name === 'spec_T')?.value
+      const smassiiType = physPar.find((p: any) => p.name === 'spec_B')?.value
+      const diameter = physPar.find((p: any) => p.name === 'diameter')?.value
+      const albedo = physPar.find((p: any) => p.name === 'albedo')?.value
+
       // Base asteroid object from SBDB
       let asteroid: Asteroid = {
         links: { self: obj?.self || '' },
@@ -185,6 +192,11 @@ export function useAsteroids() {
         is_potentially_hazardous_asteroid: Boolean(obj?.is_potentially_hazardous_asteroid || false),
         close_approach_data: [],
         is_sentry_object: false,
+        // Store composition data from SBDB
+        tholen_spectral_type: tholenType,
+        smassii_spectral_type: smassiiType,
+        diameter_km: diameter ? Number(diameter) : undefined,
+        geometric_albedo: albedo ? Number(albedo) : undefined,
       }
 
       // Cache SBDB-derived object immediately to prevent races

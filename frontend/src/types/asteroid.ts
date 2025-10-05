@@ -54,6 +54,21 @@ export interface Asteroid {
   is_potentially_hazardous_asteroid: boolean
   close_approach_data: CloseApproachData[]
   is_sentry_object: boolean
+  // Composition data from SBDB
+  tholen_spectral_type?: string // Tholen spectral classification (C, S, M, etc.)
+  smassii_spectral_type?: string // SMASSII spectral classification
+  diameter_km?: number // Diameter from SBDB in kilometers
+  geometric_albedo?: number // Geometric albedo from SBDB
+  
+  // Additional orbital and physical properties for Asterank calculations
+  GM?: number // Gravitational parameter (km³/s²)
+  moid?: number // Minimum Orbit Intersection Distance (AU)
+  aphelion_distance?: number // Aphelion distance (AU)
+  perihelion_distance?: number // Perihelion distance (AU)
+  semi_major_axis?: number // Semi-major axis (AU)
+  delta_v?: number // Delta-v for mission (km/s)
+  a?: number // Semi-major axis (alternate property)
+  q?: number // Perihelion distance (alternate property)
 }
 
 export interface AsteroidComposition {
