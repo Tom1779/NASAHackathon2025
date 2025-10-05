@@ -142,42 +142,48 @@ export class AsteroidScene {
     this.scene.add(glow)
   }
 
-  private addEarth(): void {
-    // Earth sphere
-    const earthGeometry = new THREE.SphereGeometry(3, 32, 32)// 3, 32, 32
-    const earthMaterial = new THREE.MeshStandardMaterial({
-      color: 0x009911,//  0x2233ff
-      emissive: 0x005511, //0x112244
-      roughness: 0.8,
-      metalness: 0.2,
-    })
-    this.earth = new THREE.Mesh(earthGeometry, earthMaterial)
+ private addEarth(): void {
+  const textureLoader = new THREE.TextureLoader();
+  const earthTexture = textureLoader.load('textures/earth.jpg'); // ✅ correct path for your setup
 
-    // Position Earth at 1 AU
-    const earthX = this.EARTH_ORBIT_RADIUS * this.SCALE
-    this.earth.position.set(earthX, 0, 0)
-    this.scene.add(this.earth)
+  // Create sphere geometry
+  const earthGeometry = new THREE.SphereGeometry(3, 32, 32);
 
-    // Earth's orbit
-    const orbitPoints: THREE.Vector3[] = []
-    const segments = 128
-    for (let i = 0; i <= segments; i++) {
-      const angle = (i / segments) * Math.PI * 2
-      const x = Math.cos(angle) * this.EARTH_ORBIT_RADIUS * this.SCALE
-      const z = Math.sin(angle) * this.EARTH_ORBIT_RADIUS * this.SCALE
-      orbitPoints.push(new THREE.Vector3(x, 0, z))
-    }
+  // Basic material with just the texture
+  const earthMaterial = new THREE.MeshBasicMaterial({
+    map: earthTexture, // apply the image
+  });
 
-    const orbitGeometry = new THREE.BufferGeometry().setFromPoints(orbitPoints)
-    const orbitMaterial = new THREE.LineBasicMaterial({
-      color: 0x4488ff,
-      transparent: true,
-      opacity: 0.4,
-    })
-    this.earthOrbit = new THREE.Line(orbitGeometry, orbitMaterial)
-    this.scene.add(this.earthOrbit)
+  // Create mesh
+  this.earth = new THREE.Mesh(earthGeometry, earthMaterial);
+
+  // Position Earth at 1 AU
+  const earthX = this.EARTH_ORBIT_RADIUS * this.SCALE;
+  this.earth.position.set(earthX, 0, 0);
+
+  // Add Earth to the scene
+  this.scene.add(this.earth);
+
+  // Draw Earth's orbit
+  const orbitPoints: THREE.Vector3[] = [];
+  const segments = 128;
+  for (let i = 0; i <= segments; i++) {
+    const angle = (i / segments) * Math.PI * 2;
+    const x = Math.cos(angle) * this.EARTH_ORBIT_RADIUS * this.SCALE;
+    const z = Math.sin(angle) * this.EARTH_ORBIT_RADIUS * this.SCALE;
+    orbitPoints.push(new THREE.Vector3(x, 0, z));
   }
 
+  const orbitGeometry = new THREE.BufferGeometry().setFromPoints(orbitPoints);
+  const orbitMaterial = new THREE.LineBasicMaterial({
+    color: 0x4488ff,
+    transparent: true,
+    opacity: 0.4,
+  });
+
+  this.earthOrbit = new THREE.Line(orbitGeometry, orbitMaterial);
+  this.scene.add(this.earthOrbit);
+}
   private addStarfield(): void {
     const starsGeometry = new THREE.BufferGeometry()
     const starPositions: number[] = []
