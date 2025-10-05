@@ -1,13 +1,14 @@
 <template>
-  <Card class="bg-black/40 border border-purple-500/30">
-    <template #title>
-      <div class="flex items-center gap-2 text-white">
-        <i class="pi pi-search text-purple-400"></i>
-        Find Asteroid
-      </div>
-    </template>
-    <template #content>
-      <div class="space-y-4">
+  <div class="asteroid-selector-wrapper">
+    <Card class="bg-black/40 border border-purple-500/30">
+      <template #title>
+        <div class="flex items-center gap-2 text-white">
+          <i class="pi pi-search text-purple-400"></i>
+          Find Asteroid
+        </div>
+      </template>
+      <template #content>
+        <div class="space-y-4">
         <!-- Search Input -->
         <div>
           <label class="block text-purple-300 mb-2 text-sm font-medium">
@@ -62,22 +63,22 @@
         </div>
 
         <!-- Search Results -->
-        <div 
-          v-if="shouldShowDropdown" 
-          class="search-results-dropdown max-h-64 overflow-y-auto border border-purple-500/30 rounded-lg relative z-10" 
-          @click.stop 
+        <div
+          v-if="shouldShowDropdown"
+          class="search-results-dropdown max-h-64 overflow-y-auto border border-purple-500/30 rounded-lg relative z-10"
+          @click.stop
           @mousedown="keepDropdownOpen"
         >
-          <div v-if="loadingSearch" class="p-4 text-center text-purple-300">
+          <div v-if="loadingSearch && stablePaginatedResults.length === 0" class="p-4 text-center text-purple-300">
             <i class="pi pi-spin pi-spinner mr-2"></i>
             Searching...
           </div>
-          <div v-else-if="filteredAsteroids.length === 0" class="p-4 text-center text-gray-400">
+          <div v-else-if="stablePaginatedResults.length === 0" class="p-4 text-center text-gray-400">
             No asteroids found matching your criteria
           </div>
           <div v-else>
             <div
-              v-for="asteroid in paginatedResults"
+              v-for="asteroid in stablePaginatedResults"
               :key="asteroid.id"
               class="p-3 hover:bg-purple-900/30 hover:scale-[1.02] transition-all duration-200 cursor-pointer border-b border-purple-500/10 last:border-b-0"
               @click="selectAsteroid(asteroid)"
@@ -137,32 +138,26 @@
                   <i class="pi pi-spin pi-spinner" v-if="loadingMore && currentPage === totalPages"></i>
                 </Button>
               </div>
-              
+
               <!-- API Results summary -->
               <div v-if="filteredAsteroids.length > 0" class="text-xs text-purple-400 mb-2 text-center">
                 {{ filteredAsteroids.length }} asteroids loaded
                 <span v-if="hasMoreNeoResults"> • More available from NASA</span>
               </div>
-              
-              <!-- Manual Load More (secondary option) -->
-              <div v-if="hasMoreNeoResults && !loadingMore" class="flex justify-center load-more-button">
-                <Button
-                  @click="loadMoreFromNeo(); keepDropdownOpen()"
-                  @mousedown="keepDropdownOpen"
-                  :disabled="loadingAsteroids"
-                  size="small"
-                  severity="secondary"
-                  text
-                  class="text-xs"
-                >
-                  <i class="pi pi-plus mr-1"></i>
-                  Load More Now
-                </Button>
-              </div>
-              
-              <!-- No more results message -->
-              <div v-else-if="filteredAsteroids.length > 0" class="text-xs text-purple-400 text-center py-2">
-                All available results loaded
+
+              <!-- Background Loading Indicator -->
+              <div class="text-xs text-center py-2">
+                <div v-if="props.isLoadingAll" class="text-purple-300">
+                  <i class="pi pi-spin pi-spinner mr-2"></i>
+                  Loading all asteroids in background... ({{ filteredAsteroids.length }} loaded)
+                </div>
+                <div v-else-if="props.allDataLoaded" class="text-green-400">
+                  <i class="pi pi-check-circle mr-1"></i>
+                  All {{ filteredAsteroids.length }} asteroids loaded
+                </div>
+                <div v-else-if="filteredAsteroids.length > 0" class="text-purple-400">
+                  {{ filteredAsteroids.length }} asteroids available
+                </div>
               </div>
             </div>
           </div>
@@ -228,10 +223,11 @@
       </div>
     </template>
   </Card>
+  </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onUnmounted, nextTick } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import Card from 'primevue/card'
 import Select from 'primevue/select'
 import Button from 'primevue/button'
@@ -245,6 +241,8 @@ interface Props {
   asteroids: Asteroid[]
   loadingAsteroids: boolean
   hasMoreNeoResults?: boolean
+  isLoadingAll?: boolean
+  allDataLoaded?: boolean
 }
 
 interface Emits {
@@ -263,10 +261,10 @@ const isSearchFocused = ref(false)
 const loadingSearch = ref(false)
 const loadingMore = ref(false)
 const showDropdown = ref(false)
-const resultsContainer = ref<HTMLElement | null>(null)
 let searchDebounceHandle: ReturnType<typeof setTimeout> | null = null
 const currentPage = ref(1)
-const itemsPerPage = 20
+const itemsPerPage = 100
+const stablePaginatedResults = ref<Asteroid[]>([])
 
 // Filter options
 const filters = ref({
@@ -368,12 +366,12 @@ const filteredAsteroids = computed(() => {
 const totalPages = computed(() => {
   const totalItems = filteredAsteroids.value.length
   const localPages = Math.ceil(totalItems / itemsPerPage)
-  
+
   // If we have more data available from NASA API, add extra pages
   if (props.hasMoreNeoResults) {
     return localPages + 3 // Show 3 additional pages that will trigger API loads
   }
-  
+
   return Math.max(localPages, 1)
 })
 
@@ -381,10 +379,10 @@ const paginatedResults = computed(() => {
   const totalItems = filteredAsteroids.value.length
   const start = (currentPage.value - 1) * itemsPerPage
   const end = start + itemsPerPage
-  
+
   // Check if we need more data from API
   const needsMoreData = end > totalItems && props.hasMoreNeoResults
-  
+
   if (needsMoreData) {
     // Trigger load more in next tick to avoid computed side effects
     nextTick(() => {
@@ -392,11 +390,11 @@ const paginatedResults = computed(() => {
         loadMoreFromNeo()
       }
     })
-    
+
     // Return what we have for now
     return filteredAsteroids.value.slice(start, totalItems)
   }
-  
+
   return filteredAsteroids.value.slice(start, end)
 })
 
@@ -419,31 +417,54 @@ const onSearchFocus = () => {
   showDropdown.value = true
 }
 
-const onSearchBlur = (event?: FocusEvent) => {
-  // Don't close if clicking on pagination or load more buttons
-  const relatedTarget = event?.relatedTarget as HTMLElement
-  if (relatedTarget?.closest('.pagination-controls') || 
-      relatedTarget?.closest('.load-more-button') ||
-      relatedTarget?.closest('.search-results-dropdown')) {
-    return
-  }
-  
-  // Delay hiding the results to allow clicks on them
-  setTimeout(() => {
-    isSearchFocused.value = false
-    if (!searchQuery.value && !hasFilters.value) {
-      showDropdown.value = false
-    }
-  }, 150)
+const onSearchBlur = () => {
+  // Don't close on blur at all - we handle closing via click-outside detection
+  // This completely prevents flickering from blur events
+  return
 }
 
 const keepDropdownOpen = () => {
   showDropdown.value = true
+  isSearchFocused.value = true
 }
 
 const applyFilters = () => {
   currentPage.value = 1
 }
+
+// Close dropdown when clicking outside
+const handleClickOutside = (event: MouseEvent) => {
+  const target = event.target as HTMLElement
+
+  // Check if click is inside the selector component wrapper
+  const wrapper = document.querySelector('.asteroid-selector-wrapper')
+  if (wrapper && wrapper.contains(target)) {
+    // Click is inside, don't close
+    return
+  }
+
+  // Click is outside, close the dropdown
+  if (showDropdown.value) {
+    showDropdown.value = false
+    isSearchFocused.value = false
+  }
+}
+
+// Setup click outside listener
+onMounted(() => {
+  // Use capture phase and add a small delay to ensure DOM is ready
+  setTimeout(() => {
+    document.addEventListener('click', handleClickOutside, true)
+  }, 100)
+})
+
+onUnmounted(() => {
+  document.removeEventListener('click', handleClickOutside, true)
+  if (searchDebounceHandle !== null) {
+    clearTimeout(searchDebounceHandle)
+    searchDebounceHandle = null
+  }
+})
 
 const selectAsteroid = (asteroid: Asteroid) => {
   emit('update:selectedAsteroid', asteroid)
@@ -486,7 +507,7 @@ const showHazardousOnly = () => {
 
 const loadMoreFromNeo = async () => {
   if (loadingMore.value) return
-  
+
   loadingMore.value = true
   try {
     emit('loadMore')
@@ -501,12 +522,12 @@ const loadMoreFromNeo = async () => {
 const goToPage = async (page: number) => {
   const requiredItems = page * itemsPerPage
   const currentItems = filteredAsteroids.value.length
-  
+
   // If we need more items and API has more data, load it first
   if (requiredItems > currentItems && props.hasMoreNeoResults && !loadingMore.value) {
     await loadMoreFromNeo()
   }
-  
+
   currentPage.value = page
 }
 
@@ -515,14 +536,13 @@ watch([filters, searchQuery], () => {
   currentPage.value = 1
 }, { deep: true })
 
+watch(paginatedResults, (newResults) => {
+  if (newResults.length > 0) {
+    stablePaginatedResults.value = newResults
+  }
+}, { immediate: true })
+
 watch(() => props.loadingAsteroids, (isLoading) => {
   loadingSearch.value = isLoading && (isSearchFocused.value || Boolean(searchQuery.value))
-})
-
-onUnmounted(() => {
-  if (searchDebounceHandle !== null) {
-    clearTimeout(searchDebounceHandle)
-    searchDebounceHandle = null
-  }
 })
 </script>
