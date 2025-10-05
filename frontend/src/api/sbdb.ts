@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const BASE_URL = 'https://ssd-api.jpl.nasa.gov';
+const BASE_URL = import.meta.env.VITE_NASA_SBDB_BASE_URL || 'https://ssd-api.jpl.nasa.gov';
 
 export interface SbdbResponse {
     [key: string]: any;

@@ -1,7 +1,12 @@
 import axios from 'axios';
 
-const NASA_API_KEY = 'Whi7dNeG5uq4kAEi32jBPh2gIEGtibszuSk1fdgT'; 
-const BASE_URL = 'https://api.nasa.gov/neo/rest/v1';
+const NASA_API_KEY = import.meta.env.VITE_NASA_API_KEY || 'Whi7dNeG5uq4kAEi32jBPh2gIEGtibszuSk1fdgT'; 
+const BASE_URL = import.meta.env.VITE_NASA_NEO_BASE_URL || 'https://api.nasa.gov/neo/rest/v1';
+
+// Log warning if using fallback API key
+if (!import.meta.env.VITE_NASA_API_KEY) {
+  console.warn('VITE_NASA_API_KEY not found in environment, using fallback key');
+}
 
 /**
  * Fetches Near Earth Objects (NEOs) for a given date range.
@@ -11,7 +16,7 @@ const BASE_URL = 'https://api.nasa.gov/neo/rest/v1';
  */
 export const fetchNeoData = async (startDate: string, endDate: string) => {
     try {
-        const url = `${BASE_URL}/feed`;
+        const url = '/api/neo/feed';
         const params = {
             start_date: startDate,
             end_date: endDate,
@@ -47,13 +52,13 @@ export const fetchNeoData = async (startDate: string, endDate: string) => {
  */
 export const fetchNeoDetails = async (neoId: string) => {
     try {
-        const response = await axios.get(`${BASE_URL}/neo/${neoId}`, {
+        const response = await axios.get(`/api/neo/neo/${neoId}`, {
             params: {
                 api_key: NASA_API_KEY,
             },
             
         });
-        const url = `${BASE_URL}/neo/${neoId}`;
+        const url = `/api/neo/neo/${neoId}`;
         const params = { api_key: NASA_API_KEY };
         console.log('Sending request to NEO details API:', { url, params });
         const data = response.data;
@@ -78,13 +83,90 @@ export const fetchNeoDetails = async (neoId: string) => {
 };
 
 /**
+ * Browse NEO dataset with pagination support for the asteroid selector
+ * @param page - page number (0-based)
+ * @param size - items per page (default 20, max 100)
+ */
+export const fetchNeoBrowsePage = async (page = 0, size = 20) => {
+    try {
+        const url = '/api/neo/neo/browse';
+        const params = { 
+            page, 
+            size: Math.min(size, 100), // NASA API max is 100
+            api_key: NASA_API_KEY 
+        };
+        console.log('Requesting NEO browse page:', { url, params });
+        const response = await axios.get(url, { params });
+        return response.data;
+    } catch (error) {
+        console.error('Error fetching NEO browse page:', error);
+        throw error;
+    }
+};
+
+/**
+ * Browse NEOs with pagination - let the API handle pagination, we'll do client-side search
+ * @param page - page number (0-based) 
+ * @param size - items per page
+ */
+export const browseNeos = async (page = 0, size = 20) => {
+    return fetchNeoBrowsePage(page, size);
+};
+
+/**
+ * Search NEOs by name or ID - for now we'll fetch and filter client-side
+ * In a production app, you'd want server-side search if the API supports it
+ * @param query - search query
+ * @param page - page number (0-based) 
+ * @param size - items per page
+ */
+export const searchNeos = async (query: string, page = 0, size = 20) => {
+    try {
+        // For search, we fetch the current page and filter client-side
+        // The NASA NEO browse API doesn't have built-in search parameters
+        const data = await fetchNeoBrowsePage(page, size);
+        
+        if (!query.trim()) {
+            return data; // Return all results if no query
+        }
+        
+        const queryLower = query.toLowerCase();
+        const filteredItems = (data.near_earth_objects || []).filter((neo: any) => {
+            const name = (neo.name || '').toLowerCase();
+            const id = String(neo.id || '');
+            const refId = String(neo.neo_reference_id || '');
+            
+            return name.includes(queryLower) || 
+                   id.includes(query) || 
+                   refId.includes(query);
+        });
+        
+        return {
+            ...data,
+            near_earth_objects: filteredItems,
+            // Keep original pagination info for API-level pagination
+            page: data.page,
+            // Add search metadata
+            search: {
+                query,
+                total_filtered: filteredItems.length,
+                total_on_page: (data.near_earth_objects || []).length
+            }
+        };
+    } catch (error) {
+        console.error('Error searching NEOs:', error);
+        throw error;
+    }
+};
+
+/**
  * Browse the entire NEO dataset via the NeoWs `browse` endpoint.
  * This function will page through results until it has fetched every page.
  * WARNING: This will make many requests and can hit NASA rate limits. Use with care.
  * @param delayMs - milliseconds to wait between pages (default 250ms)
  */
 export const fetchNeoBrowse = async (delayMs = 250) => {
-    const url = `${BASE_URL}/neo/browse`;
+    const url = '/api/neo/neo/browse';
     let page = 0;
     let allItems: any[] = [];
 

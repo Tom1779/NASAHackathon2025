@@ -22,6 +22,11 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api\/sbdb/, '/sbdb.api'),
       },
+      '/api/neo': {
+        target: 'https://api.nasa.gov/neo/rest/v1',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/neo/, ''),
+      },
     },
   },
 })
