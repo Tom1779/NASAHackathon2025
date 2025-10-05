@@ -268,6 +268,52 @@ function formatMass(kg: number): string {
 }
 
 /**
+ * Calculate estimates for unknown composition asteroids
+ */
+function calculateUnknownCompositionEstimates(asteroid: Asteroid) {
+  const { possibleCompositions } = useComposition(asteroid)
+  
+  return possibleCompositions.value.map(({ spectralType, composition, probability }) => {
+    // Create a mock asteroid with the specific spectral type for calculation
+    const mockAsteroid: Asteroid = {
+      ...asteroid,
+      tholen_spectral_type: spectralType,
+      smassii_spectral_type: undefined
+    }
+    
+    // Calculate basic properties for this composition
+    const mass = calculateAsterankMass(mockAsteroid)
+    const mockComposition = useComposition(mockAsteroid)
+    const materials = mockComposition.materials.value || []
+    
+    // Calculate value using the composition materials directly
+    let totalValuePerKg = 0
+    for (const material of materials) {
+      const materialName = material.material
+      const percentage = Number(material.percentage) / 100
+      const pricePerKg = MARKET_PRICES[materialName as keyof typeof MARKET_PRICES] || 0
+      totalValuePerKg += percentage * pricePerKg
+    }
+    
+    const totalValue = mass * totalValuePerKg
+    const closenessWeight = asterankClosenessWeight(mockAsteroid)
+    const profit = asterankProfit(totalValue, closenessWeight, mockAsteroid.delta_v)
+    
+    return {
+      spectralType,
+      displayName: composition.displayName,
+      probability,
+      mass,
+      totalValue,
+      profit,
+      valuePerKg: totalValuePerKg,
+      closenessWeight,
+      materials
+    }
+  })
+}
+
+/**
  * Main composable for asteroid value calculations (Asterank methodology)
  */
 export function useAsteroidCalculations(asteroid: Asteroid) {
@@ -281,6 +327,14 @@ export function useAsteroidCalculations(asteroid: Asteroid) {
   })
   
   const composition = useComposition(asteroid)
+  
+  // Handle unknown composition asteroids
+  const unknownCompositionEstimates = computed(() => {
+    if (composition.isUnknown.value) {
+      return calculateUnknownCompositionEstimates(asteroid)
+    }
+    return []
+  })
   
   // Basic physical properties
   const diameter = computed(() => getAsteroidDiameter(asteroid))
@@ -459,6 +513,9 @@ export function useAsteroidCalculations(asteroid: Asteroid) {
     // Material breakdown
     materials,
     topMaterials,
+    
+    // Unknown composition estimates
+    unknownCompositionEstimates,
     
     // Financial calculations (legacy for compatibility)
     totalGrossValue,

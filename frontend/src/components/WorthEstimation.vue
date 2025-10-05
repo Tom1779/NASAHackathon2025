@@ -41,7 +41,7 @@
                   <p class="text-purple-300/70 text-xs">After mission costs</p>
                 </div>
               </div>
-              <div class="text-3xl font-bold font-mono"
+              <div class="text-3xl font-bold font-mono text-right"
                    :class="{ 
                      'text-green-400': (calculations?.asterankProfitValue?.value || 0) > 0, 
                      'text-red-400': (calculations?.asterankProfitValue?.value || 0) <= 0 
@@ -70,10 +70,13 @@
           <div class="bg-gradient-to-r from-indigo-900/30 to-purple-900/30 p-6 rounded-xl border border-indigo-500/30">
             <div class="flex items-center gap-3 mb-6">
               <i class="pi pi-th-large text-indigo-400 text-xl"></i>
-              <h3 class="text-white text-xl font-bold">Material Composition</h3>
+              <h3 class="text-white text-xl font-bold">
+                {{ composition?.isUnknown?.value ? 'Possible Compositions' : 'Material Composition' }}
+              </h3>
             </div>
             
-            <div v-if="calculations?.materials.value && calculations.materials.value.length > 0" class="space-y-3">
+            <!-- Known Composition -->
+            <div v-if="!composition?.isUnknown?.value && calculations?.materials.value && calculations.materials.value.length > 0" class="space-y-3">
               <div 
                 v-for="material in calculations.materials.value" 
                 :key="material?.material"
@@ -98,16 +101,17 @@
                   </div>
                   
                   <!-- Value -->
-                  <div class="text-right">
-                    <div class="font-mono font-bold"
+                  <div class="text-right ml-4 flex-shrink-0 w-24">
+                    <div class="font-mono font-bold text-right"
                          :class="{
                            'text-green-400': (material?.netProfit || 0) > 0,
                            'text-yellow-400': (material?.netProfit || 0) === 0,
                            'text-red-400': (material?.netProfit || 0) < 0
-                         }">
+                         }"
+                         style="padding: 0 !important; margin: 0 !important; text-align: right !important; display: block !important; width: 100% !important;">
                       {{ calculations.formatValue(material?.netProfit || 0) }}
                     </div>
-                    <div class="text-gray-400 text-xs">
+                    <div class="text-gray-400 text-xs text-right">
                       ${{ (material?.pricePerKg || 0).toLocaleString() }}/kg
                     </div>
                   </div>
@@ -115,6 +119,86 @@
               </div>
             </div>
             
+            <!-- Unknown Composition - Show Possible Types -->
+            <div v-else-if="composition?.isUnknown?.value && calculations?.unknownCompositionEstimates?.value && calculations.unknownCompositionEstimates.value.length > 0" class="space-y-4">
+              <div class="bg-orange-900/20 p-4 rounded-lg border border-orange-500/30 mb-4">
+                <div class="flex items-center gap-2 mb-2">
+                  <i class="pi pi-exclamation-triangle text-orange-400"></i>
+                  <span class="text-orange-300 font-semibold">Spectral Type Unknown</span>
+                </div>
+                <p class="text-gray-300 text-sm">
+                  Based on statistical distribution of asteroid belt populations, here are the possible compositions and their estimated values:
+                </p>
+              </div>
+              
+              <div 
+                v-for="estimate in calculations?.unknownCompositionEstimates?.value || []" 
+                :key="estimate.spectralType"
+                class="bg-black/30 p-4 rounded-lg border border-gray-600/30 hover:border-gray-500/50 transition-all"
+              >
+                <div class="flex justify-between items-center mb-3">
+                  <!-- Type Info -->
+                  <div class="flex items-center gap-4">
+                    <div class="w-3 h-3 rounded-full"
+                         :class="{
+                           'bg-green-400': estimate.profit > 0,
+                           'bg-red-400': estimate.profit <= 0
+                         }"></div>
+                    <div>
+                      <div class="flex items-center gap-2">
+                        <span class="text-white font-bold">{{ estimate.spectralType }}-type</span>
+                        <span class="text-gray-400">{{ estimate.displayName }}</span>
+                        <span class="px-2 py-1 bg-blue-900/40 text-blue-300 text-xs rounded-full border border-blue-500/30">
+                          ~{{ estimate.probability }}% probability
+                        </span>
+                      </div>
+                      <div class="text-gray-400 text-sm">
+                        Mass: {{ calculations?.formatMass(estimate.mass) }}
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <!-- Values -->
+                  <div class="text-right ml-4 flex-shrink-0 w-24">
+                    <div class="font-mono font-bold text-right"
+                         :class="{
+                           'text-green-400': estimate.profit > 0,
+                           'text-red-400': estimate.profit <= 0
+                         }"
+                         style="padding: 0 !important; margin: 0 !important; text-align: right !important; display: block !important; width: 100% !important;">
+                      {{ calculations?.formatValue(estimate.profit) }}
+                    </div>
+                    <div class="text-gray-400 text-xs text-right">
+                      Total: {{ calculations?.formatValue(estimate.totalValue) }}
+                    </div>
+                  </div>
+                </div>
+                
+                <!-- Material breakdown for this type -->
+                <div class="mt-4 space-y-2">
+                  <div class="text-gray-400 text-xs font-semibold uppercase tracking-wider mb-3">Material Composition</div>
+                  <div class="space-y-2">
+                    <div 
+                      v-for="material in estimate.materials" 
+                      :key="material.material"
+                      class="flex items-center justify-between p-3 bg-gradient-to-r from-gray-800/40 to-slate-800/40 rounded-lg border border-gray-600/30 hover:border-gray-500/50 transition-all"
+                    >
+                      <div class="flex items-center gap-3 flex-1 min-w-0">
+                        <div class="w-2 h-2 rounded-full bg-gray-400 flex-shrink-0"></div>
+                        <span class="text-gray-300 text-sm font-medium truncate">
+                          {{ material.info?.name || material.material }}
+                        </span>
+                      </div>
+                      <div class="text-white font-mono text-sm font-bold text-right ml-4 flex-shrink-0 w-24">
+                        {{ formatPercentage(material.percentage) }}%
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <!-- No Data -->
             <div v-else class="text-center py-8">
               <i class="pi pi-info-circle text-4xl text-gray-500 mb-3 block"></i>
               <p class="text-gray-400">No composition data available</p>
@@ -139,12 +223,10 @@
               
               <div class="bg-black/30 p-4 rounded-lg text-center">
                 <div class="text-blue-400 text-sm uppercase tracking-wide mb-1">Viability</div>
-                <div class="flex items-center justify-center gap-2">
-                  <div class="w-3 h-3 rounded-full" 
-                       :class="{ 'bg-green-400': calculations?.isViable.value, 'bg-red-400': !calculations?.isViable.value }"></div>
-                  <span class="text-white font-semibold">
-                    {{ calculations?.viabilityRating.value || 'Unknown' }}
-                  </span>
+                <div class="w-3 h-3 rounded-full mx-auto mb-2" 
+                     :class="{ 'bg-green-400': calculations?.isViable.value, 'bg-red-400': !calculations?.isViable.value }"></div>
+                <div class="text-white font-semibold text-center w-full">
+                  {{ calculations?.viabilityRating.value || 'Unknown' }}
                 </div>
               </div>
               
