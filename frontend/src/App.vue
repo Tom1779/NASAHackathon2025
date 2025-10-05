@@ -57,7 +57,13 @@ import { useAsteroids } from './composables/useAsteroids'
 import type { Asteroid } from './types/asteroid'
 
 // Composables
-const { asteroids, loading: loadingAsteroids, fetchAsteroids, searchAsteroids, fetchDetailsForId } = useAsteroids()
+const {
+  asteroids,
+  loading: loadingAsteroids,
+  searchAsteroids,
+  fetchDetailsForId,
+  ensureCatalogPrefetched,
+} = useAsteroids()
 
 // Reactive data
 const currentPage = ref<'home' | 'about'>('home')
@@ -70,13 +76,12 @@ const onAnalyzeAsteroid = (asteroid: Asteroid) => {
   // You can emit events or call methods for chemical composition analysis
 }
 
-const onSearchAsteroids = (query: string) => {
+const onSearchAsteroids = async (query: string) => {
   // Route the selector's search into our composable catalog search so results
   // come from the CSV (no NEO queries until selection).
   console.log('Searching asteroids (catalog):', query)
   try {
-    const results = searchAsteroids(query)
-    asteroids.value = results
+    await searchAsteroids(query)
   } catch (e) {
     console.warn('Catalog search failed, leaving asteroids list unchanged', e)
   }
@@ -86,10 +91,15 @@ const onSearchAsteroids = (query: string) => {
 // When the app mounts, load the lightweight catalog + initial data placeholder
 // Do NOT fetch the full NEO feed on mount. We'll show the CSV catalog and
 // only query SBDB/NEO when the user selects an entry.
-onMounted(() => {
+onMounted(async () => {
   // Populate the selector with the full CSV catalog initially
   // by performing an empty search which returns the catalog mapping.
-  try { asteroids.value = searchAsteroids('') } catch (e) { /* ignore */ }
+  try {
+    await ensureCatalogPrefetched()
+    await searchAsteroids('')
+  } catch (e) {
+    console.debug('Initial catalog load skipped', e)
+  }
 })
 
 // Watch selectedAsteroid for lightweight picks and fetch full details when needed
