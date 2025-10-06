@@ -1,1 +1,2 @@
 * text=auto eol=lf
+frontend/src/data/all_neo_data.json filter=lfs diff=lfs merge=lfs -text
