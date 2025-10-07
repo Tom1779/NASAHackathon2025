@@ -14,13 +14,16 @@
     "build-only": "vite build",
     "type-check": "vue-tsc --build",
     "lint": "eslint . --fix",
-    "format": "prettier --write src/"
+    "format": "prettier --write src/",
+    "fetch-neo-data": "node scripts/fetchAllNeoData.js",
+    "fetch-neo-fresh": "node scripts/startFreshFetch.js && node scripts/fetchAllNeoData.js"
   },
   "dependencies": {
     "@primeuix/themes": "^1.2.5",
     "@primevue/icons": "^4.4.0",
     "@types/three": "^0.180.0",
     "axios": "^1.12.2",
+    "dotenv": "^17.2.3",
     "pinia": "^3.0.3",
     "primeicons": "^7.0.0",
     "primevue": "^4.4.0",
