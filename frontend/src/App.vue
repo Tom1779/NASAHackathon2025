@@ -16,13 +16,11 @@
             :selected-asteroid="selectedAsteroid"
             :asteroids="asteroids"
             :loading-asteroids="loadingAsteroids"
-            :has-more-neo-results="neoHasMore"
             :is-loading-all="isLoadingAll"
             :all-data-loaded="allDataLoaded"
             @update:selected-asteroid="onSelectAsteroid"
             @analyze="onAnalyzeAsteroid"
             @search="onSearchAsteroids"
-            @load-more="onLoadMoreAsteroids"
           />
         </div>
 
@@ -64,15 +62,11 @@ import type { Asteroid } from './types/asteroid'
 const {
   asteroids,
   loading: loadingAsteroids,
-  neoHasMore,
   isLoadingAll,
   allDataLoaded,
   searchAsteroids,
-  loadMoreAsteroids,
-  loadAllDataInBackground,
-  waitForAllData,
+  loadAllAsteroidsFromJson,
   fetchDetailsForId,
-  ensureCatalogPrefetched,
 } = useAsteroids()
 
 // Reactive data
@@ -83,67 +77,38 @@ const selectedAsteroid = ref<Asteroid | null>(null)
 const onAnalyzeAsteroid = (asteroid: Asteroid) => {
   console.log('Analyzing asteroid:', asteroid.name)
   // This is where you would trigger detailed analysis
-  // You can emit events or call methods for chemical composition analysis
 }
 
 const onSearchAsteroids = async (query: string) => {
-  // Wait for all data to be loaded before searching
-  console.log('Searching asteroids (NEO browse):', query)
+  console.log('Searching asteroids:', query)
   try {
-    // If there's a query and data isn't fully loaded, wait for it
-    if (query && query.trim() && !allDataLoaded.value) {
-      console.log('Waiting for all data before searching...')
-      await waitForAllData()
-    }
     await searchAsteroids(query)
   } catch (e) {
-    console.warn('NEO search failed, leaving asteroids list unchanged', e)
-  }
-}
-
-const onLoadMoreAsteroids = async () => {
-  console.log('Loading more asteroids from NEO browse API')
-  try {
-    await loadMoreAsteroids()
-  } catch (e) {
-    console.warn('Load more asteroids failed:', e)
+    console.warn('Search failed:', e)
   }
 }
 
 // Lifecycle
-// When the app mounts, load the initial NEO data and start background loading
 onMounted(async () => {
-  // Populate the selector with NEO browse data initially
+  // Load all asteroids from local JSON file
   try {
-    await ensureCatalogPrefetched()
-    await searchAsteroids('')
-
-    // Start loading all data in the background
-    console.log('Starting automatic background data load...')
-    loadAllDataInBackground().then(() => {
-      console.log('All NEO data loaded successfully!')
-    }).catch(err => {
-      console.error('Background loading encountered an error:', err)
-    })
+    console.log('Loading all asteroids from JSON...')
+    await loadAllAsteroidsFromJson()
+    console.log('All asteroids loaded successfully!')
   } catch (e) {
-    console.debug('Initial NEO load failed', e)
+    console.error('Failed to load asteroids:', e)
   }
 })
 
-// Watch selectedAsteroid for lightweight picks and fetch full details when needed
-// Handle explicit selection from the selector. We fetch full details via the
-// composable and only then update `selectedAsteroid`. This ensures SBDB and
-// NEO are invoked exactly once per user selection (and uses the composable's
-// cache to avoid repeats).
+// Handle asteroid selection
 const onSelectAsteroid = async (astro: Asteroid | null) => {
   if (!astro) {
     selectedAsteroid.value = null
     return
   }
 
-  // If this is a lightweight catalog entry (no JPL url or zero magnitude),
-  // fetch full details first using the SPKID. Otherwise, use the provided
-  // asteroid object as-is.
+  // If this is a lightweight entry (no JPL url or zero magnitude),
+  // fetch full details first. Otherwise, use as-is.
   if (!astro.nasa_jpl_url || astro.absolute_magnitude_h === 0) {
     const full = await fetchDetailsForId(astro.id)
     if (full) {

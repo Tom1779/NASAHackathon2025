@@ -65,30 +65,48 @@
         <!-- Search Results -->
         <div
           v-if="shouldShowDropdown"
-          class="search-results-dropdown max-h-64 overflow-y-auto border border-purple-500/30 rounded-lg relative z-10"
+          class="search-results-dropdown max-h-96 overflow-y-auto border border-purple-500/30 rounded-lg relative z-10"
           @click.stop
           @mousedown="keepDropdownOpen"
         >
-          <div v-if="loadingSearch && stablePaginatedResults.length === 0" class="p-4 text-center text-purple-300">
+          <div v-if="loadingSearch" class="p-4 text-center text-purple-300">
             <i class="pi pi-spin pi-spinner mr-2"></i>
-            Searching...
+            Loading asteroids...
           </div>
-          <div v-else-if="stablePaginatedResults.length === 0" class="p-4 text-center text-gray-400">
+          <div v-else-if="nameMatches.length === 0 && idMatches.length === 0" class="p-4 text-center text-gray-400">
             No asteroids found matching your criteria
           </div>
           <div v-else>
+            <!-- Default/Featured Header (shown when no search query) -->
+            <div v-if="!searchQuery.trim() && paginatedNameMatches.length > 0">
+              <div class="sticky top-0 bg-purple-900/90 px-3 py-2 border-b border-purple-500/30 z-10">
+                <span class="text-xs font-semibold text-purple-200 uppercase tracking-wide">
+                  <i class="pi pi-star-fill text-yellow-400 mr-1"></i>
+                  Featured & Hazardous Asteroids ({{ nameMatches.length }})
+                </span>
+              </div>
+            </div>
+
+            <!-- Name Matches Section -->
+            <div v-if="paginatedNameMatches.length > 0 && searchQuery.trim()">
+              <div class="sticky top-0 bg-purple-900/90 px-3 py-2 border-b border-purple-500/30 z-10">
+                <span class="text-xs font-semibold text-purple-200 uppercase tracking-wide">
+                  Name Matches ({{ nameMatches.length }})
+                </span>
+              </div>
+            </div>
+            
             <div
-              v-for="asteroid in stablePaginatedResults"
-              :key="asteroid.id"
-              class="p-3 hover:bg-purple-900/30 hover:scale-[1.02] transition-all duration-200 cursor-pointer border-b border-purple-500/10 last:border-b-0"
+              v-for="asteroid in paginatedNameMatches"
+              :key="`name-${asteroid.id}`"
+              class="asteroid-result-item p-3 hover:bg-purple-900/30 transition-all duration-200 cursor-pointer border-b border-purple-500/10 group select-none"
               @click="selectAsteroid(asteroid)"
               :class="{ 'bg-purple-900/50': selectedAsteroid?.id === asteroid.id }"
-              style="cursor: pointer;"
             >
-              <div class="flex items-center justify-between">
+              <div class="flex items-center justify-between pointer-events-none">
                 <div class="flex items-center gap-2">
                   <i class="pi pi-circle text-yellow-400 text-xs"></i>
-                  <span class="text-white font-medium">{{ asteroid.name }}</span>
+                  <span class="asteroid-name text-white font-medium group-hover:text-purple-300 transition-colors">{{ asteroid.name }}</span>
                   <Badge
                     v-if="asteroid.is_potentially_hazardous_asteroid"
                     value="Hazardous"
@@ -98,14 +116,55 @@
                 </div>
                 <span class="text-xs text-gray-400">{{ asteroid.id }}</span>
               </div>
-              <div class="text-xs text-purple-300 mt-1">
-                Magnitude: {{ asteroid.absolute_magnitude_h }}
+              <div class="text-xs text-purple-300 mt-1 pointer-events-none">
+                Magnitude: {{ asteroid.absolute_magnitude_h.toFixed(2) }}
+                <span v-if="asteroid.estimated_diameter?.kilometers" class="ml-2">
+                  • Size: ~{{ ((asteroid.estimated_diameter.kilometers.estimated_diameter_min + 
+                    asteroid.estimated_diameter.kilometers.estimated_diameter_max) / 2).toFixed(2) }} km
+                </span>
               </div>
             </div>
-            <!-- Pagination and Load More -->
-            <div class="p-3 border-t border-purple-500/30">
-              <!-- Local pagination for current results -->
-              <div v-if="totalPages > 1" class="pagination-controls flex justify-between items-center mb-3">
+
+            <!-- ID Matches Section -->
+            <div v-if="paginatedIdMatches.length > 0">
+              <div class="sticky top-0 bg-purple-900/90 px-3 py-2 border-b border-purple-500/30 z-10">
+                <span class="text-xs font-semibold text-purple-200 uppercase tracking-wide">
+                  ID Matches ({{ idMatches.length }})
+                </span>
+              </div>
+              <div
+                v-for="asteroid in paginatedIdMatches"
+                :key="`id-${asteroid.id}`"
+                class="asteroid-result-item p-3 hover:bg-purple-900/30 transition-all duration-200 cursor-pointer border-b border-purple-500/10 group select-none"
+                @click="selectAsteroid(asteroid)"
+                :class="{ 'bg-purple-900/50': selectedAsteroid?.id === asteroid.id }"
+              >
+                <div class="flex items-center justify-between pointer-events-none">
+                  <div class="flex items-center gap-2">
+                    <i class="pi pi-circle text-yellow-400 text-xs"></i>
+                    <span class="asteroid-name text-white font-medium group-hover:text-purple-300 transition-colors">{{ asteroid.name }}</span>
+                    <Badge
+                      v-if="asteroid.is_potentially_hazardous_asteroid"
+                      value="Hazardous"
+                      severity="danger"
+                      class="text-xs"
+                    />
+                  </div>
+                  <span class="text-xs text-gray-400">{{ asteroid.id }}</span>
+                </div>
+                <div class="text-xs text-purple-300 mt-1 pointer-events-none">
+                  Magnitude: {{ asteroid.absolute_magnitude_h.toFixed(2) }}
+                  <span v-if="asteroid.estimated_diameter?.kilometers" class="ml-2">
+                    • Size: ~{{ ((asteroid.estimated_diameter.kilometers.estimated_diameter_min + 
+                      asteroid.estimated_diameter.kilometers.estimated_diameter_max) / 2).toFixed(2) }} km
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Pagination Controls -->
+            <div class="p-3 border-t border-purple-500/30 bg-black/40">
+              <div v-if="totalPages > 1" class="pagination-controls flex justify-between items-center mb-2">
                 <Button
                   :disabled="currentPage === 1"
                   @click="goToPage(currentPage - 1); keepDropdownOpen()"
@@ -121,42 +180,31 @@
                   Page {{ currentPage }} of {{ totalPages }}
                   <br class="block sm:hidden">
                   <span class="text-purple-400">
-                    ({{ filteredAsteroids.length }} loaded{{ props.hasMoreNeoResults ? ', more available' : '' }})
+                    ({{ totalMatches }} total results)
                   </span>
                 </span>
                 <Button
-                  :disabled="currentPage === totalPages && !props.hasMoreNeoResults"
+                  :disabled="currentPage === totalPages"
                   @click="goToPage(currentPage + 1); keepDropdownOpen()"
                   @mousedown="keepDropdownOpen"
-                  :loading="loadingMore && currentPage === totalPages"
                   size="small"
                   severity="secondary"
                   outlined
                   class="pagination-btn"
                 >
-                  <i class="pi pi-chevron-right" v-if="!loadingMore || currentPage !== totalPages"></i>
-                  <i class="pi pi-spin pi-spinner" v-if="loadingMore && currentPage === totalPages"></i>
+                  <i class="pi pi-chevron-right"></i>
                 </Button>
               </div>
 
-              <!-- API Results summary -->
-              <div v-if="filteredAsteroids.length > 0" class="text-xs text-purple-400 mb-2 text-center">
-                {{ filteredAsteroids.length }} asteroids loaded
-                <span v-if="hasMoreNeoResults"> • More available from NASA</span>
-              </div>
-
-              <!-- Background Loading Indicator -->
-              <div class="text-xs text-center py-2">
-                <div v-if="props.isLoadingAll" class="text-purple-300">
-                  <i class="pi pi-spin pi-spinner mr-2"></i>
-                  Loading all asteroids in background... ({{ filteredAsteroids.length }} loaded)
-                </div>
-                <div v-else-if="props.allDataLoaded" class="text-green-400">
+              <!-- Results Summary -->
+              <div class="text-xs text-center">
+                <div v-if="props.allDataLoaded" class="text-green-400">
                   <i class="pi pi-check-circle mr-1"></i>
-                  All {{ filteredAsteroids.length }} asteroids loaded
+                  Searching {{ props.asteroids.length }} asteroids
                 </div>
-                <div v-else-if="filteredAsteroids.length > 0" class="text-purple-400">
-                  {{ filteredAsteroids.length }} asteroids available
+                <div v-else-if="props.isLoadingAll" class="text-purple-300">
+                  <i class="pi pi-spin pi-spinner mr-2"></i>
+                  Loading asteroid database...
                 </div>
               </div>
             </div>
@@ -206,7 +254,7 @@
               />
             </div>
             <div class="text-purple-300">Magnitude:</div>
-            <div class="text-white">{{ selectedAsteroid.absolute_magnitude_h }}</div>
+            <div class="text-white">{{ selectedAsteroid.absolute_magnitude_h.toFixed(2) }}</div>
           </div>
         </div>
 
@@ -227,7 +275,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import Card from 'primevue/card'
 import Select from 'primevue/select'
 import Button from 'primevue/button'
@@ -240,7 +288,6 @@ interface Props {
   selectedAsteroid: Asteroid | null
   asteroids: Asteroid[]
   loadingAsteroids: boolean
-  hasMoreNeoResults?: boolean
   isLoadingAll?: boolean
   allDataLoaded?: boolean
 }
@@ -249,7 +296,6 @@ interface Emits {
   (e: 'update:selectedAsteroid', asteroid: Asteroid | null): void
   (e: 'analyze', asteroid: Asteroid): void
   (e: 'search', query: string): void
-  (e: 'loadMore'): void
 }
 
 const props = defineProps<Props>()
@@ -259,12 +305,10 @@ const emit = defineEmits<Emits>()
 const searchQuery = ref('')
 const isSearchFocused = ref(false)
 const loadingSearch = ref(false)
-const loadingMore = ref(false)
 const showDropdown = ref(false)
 let searchDebounceHandle: ReturnType<typeof setTimeout> | null = null
 const currentPage = ref(1)
-const itemsPerPage = 100
-const stablePaginatedResults = ref<Asteroid[]>([])
+const itemsPerPage = 20 // Changed from 100 to 20
 
 // Filter options
 const filters = ref({
@@ -308,16 +352,6 @@ const shouldShowDropdown = computed(() => {
 const filteredAsteroids = computed(() => {
   let filtered = [...props.asteroids]
 
-  // Apply search filter
-  if (searchQuery.value) {
-    const query = searchQuery.value.toLowerCase()
-    filtered = filtered.filter(asteroid =>
-      asteroid.name.toLowerCase().includes(query) ||
-      asteroid.id.includes(query) ||
-      asteroid.neo_reference_id.includes(query)
-    )
-  }
-
   // Apply hazardous filter
   if (filters.value.hazardous && filters.value.hazardous !== 'All') {
     if (filters.value.hazardous === 'Hazardous Only') {
@@ -327,14 +361,31 @@ const filteredAsteroids = computed(() => {
     }
   }
 
-  // Apply size filter (based on magnitude - lower magnitude = larger)
+  // Apply size filter (based on estimated diameter in kilometers)
   if (filters.value.sizeRange) {
     filtered = filtered.filter(asteroid => {
-      const magnitude = asteroid.absolute_magnitude_h
+      // Get diameter from estimated_diameter (use average of min/max)
+      const diameterKm = asteroid.estimated_diameter?.kilometers
+      
+      if (!diameterKm) {
+        // Fallback to magnitude-based estimation if diameter not available
+        const magnitude = asteroid.absolute_magnitude_h
+        switch (filters.value.sizeRange) {
+          case 'small': return magnitude > 22
+          case 'medium': return magnitude >= 18 && magnitude <= 22
+          case 'large': return magnitude < 18
+          default: return true
+        }
+      }
+      
+      // Calculate average diameter
+      const avgDiameter = (diameterKm.estimated_diameter_min + diameterKm.estimated_diameter_max) / 2
+      
+      // Size ranges based on actual diameter
       switch (filters.value.sizeRange) {
-        case 'small': return magnitude > 22
-        case 'medium': return magnitude >= 18 && magnitude <= 22
-        case 'large': return magnitude < 18
+        case 'small': return avgDiameter < 1      // Less than 1 km
+        case 'medium': return avgDiameter >= 1 && avgDiameter < 10  // 1-10 km
+        case 'large': return avgDiameter >= 10    // 10+ km
         default: return true
       }
     })
@@ -363,39 +414,96 @@ const filteredAsteroids = computed(() => {
   return filtered
 })
 
-const totalPages = computed(() => {
-  const totalItems = filteredAsteroids.value.length
-  const localPages = Math.ceil(totalItems / itemsPerPage)
-
-  // If we have more data available from NASA API, add extra pages
-  if (props.hasMoreNeoResults) {
-    return localPages + 3 // Show 3 additional pages that will trigger API loads
+// Get default/featured asteroids when no search query
+const defaultResults = computed(() => {
+  if (searchQuery.value.trim()) return []
+  
+  // Show interesting asteroids by default
+  const featured = filteredAsteroids.value.filter(asteroid => {
+    // Famous or interesting asteroids
+    const name = asteroid.name.toLowerCase()
+    return name.includes('apophis') ||
+           name.includes('bennu') ||
+           name.includes('eros') ||
+           name.includes('geographos') ||
+           name.includes('toutatis') ||
+           name.includes('itokawa') ||
+           name.includes('ryugu') ||
+           asteroid.is_potentially_hazardous_asteroid
+  })
+  
+  // If we have featured asteroids, return them
+  if (featured.length > 0) {
+    // Sort hazardous first, then by size (smaller magnitude = larger)
+    return featured.sort((a, b) => {
+      if (a.is_potentially_hazardous_asteroid && !b.is_potentially_hazardous_asteroid) return -1
+      if (!a.is_potentially_hazardous_asteroid && b.is_potentially_hazardous_asteroid) return 1
+      return a.absolute_magnitude_h - b.absolute_magnitude_h
+    })
   }
-
-  return Math.max(localPages, 1)
+  
+  // Fallback: show first batch of filtered asteroids
+  return filteredAsteroids.value.slice(0, 100)
 })
 
-const paginatedResults = computed(() => {
-  const totalItems = filteredAsteroids.value.length
+// Separate name and ID matches
+const nameMatches = computed(() => {
+  if (!searchQuery.value.trim()) return defaultResults.value
+  
+  const query = searchQuery.value.toLowerCase()
+  return filteredAsteroids.value.filter(asteroid =>
+    asteroid.name.toLowerCase().includes(query)
+  )
+})
+
+const idMatches = computed(() => {
+  if (!searchQuery.value.trim()) return []
+  
+  const query = searchQuery.value.toLowerCase()
+  return filteredAsteroids.value.filter(asteroid =>
+    !asteroid.name.toLowerCase().includes(query) && (
+      asteroid.id.toLowerCase().includes(query) ||
+      asteroid.neo_reference_id.toLowerCase().includes(query)
+    )
+  )
+})
+
+const totalMatches = computed(() => nameMatches.value.length + idMatches.value.length)
+
+const totalPages = computed(() => {
+  return Math.max(Math.ceil(totalMatches.value / itemsPerPage), 1)
+})
+
+// Paginate results - show name matches first, then ID matches
+const paginatedNameMatches = computed(() => {
   const start = (currentPage.value - 1) * itemsPerPage
   const end = start + itemsPerPage
-
-  // Check if we need more data from API
-  const needsMoreData = end > totalItems && props.hasMoreNeoResults
-
-  if (needsMoreData) {
-    // Trigger load more in next tick to avoid computed side effects
-    nextTick(() => {
-      if (!loadingMore.value && props.hasMoreNeoResults) {
-        loadMoreFromNeo()
-      }
-    })
-
-    // Return what we have for now
-    return filteredAsteroids.value.slice(start, totalItems)
+  
+  if (start >= nameMatches.value.length) {
+    return []
   }
+  
+  return nameMatches.value.slice(start, Math.min(end, nameMatches.value.length))
+})
 
-  return filteredAsteroids.value.slice(start, end)
+const paginatedIdMatches = computed(() => {
+  const start = (currentPage.value - 1) * itemsPerPage
+  const end = start + itemsPerPage
+  
+  // If we're still showing name matches, don't show ID matches yet
+  if (start < nameMatches.value.length) {
+    // Calculate remaining slots after name matches
+    const remainingSlots = end - nameMatches.value.length
+    if (remainingSlots <= 0) return []
+    
+    return idMatches.value.slice(0, remainingSlots)
+  }
+  
+  // We've gone past all name matches, now show ID matches
+  const idStart = start - nameMatches.value.length
+  const idEnd = end - nameMatches.value.length
+  
+  return idMatches.value.slice(idStart, idEnd)
 })
 
 // Methods
@@ -404,7 +512,6 @@ const onSearchInput = () => {
     clearTimeout(searchDebounceHandle)
   }
 
-  loadingSearch.value = true
   currentPage.value = 1
 
   searchDebounceHandle = setTimeout(() => {
@@ -418,8 +525,7 @@ const onSearchFocus = () => {
 }
 
 const onSearchBlur = () => {
-  // Don't close on blur at all - we handle closing via click-outside detection
-  // This completely prevents flickering from blur events
+  // Don't close on blur - handle via click-outside
   return
 }
 
@@ -436,14 +542,11 @@ const applyFilters = () => {
 const handleClickOutside = (event: MouseEvent) => {
   const target = event.target as HTMLElement
 
-  // Check if click is inside the selector component wrapper
   const wrapper = document.querySelector('.asteroid-selector-wrapper')
   if (wrapper && wrapper.contains(target)) {
-    // Click is inside, don't close
     return
   }
 
-  // Click is outside, close the dropdown
   if (showDropdown.value) {
     showDropdown.value = false
     isSearchFocused.value = false
@@ -452,7 +555,6 @@ const handleClickOutside = (event: MouseEvent) => {
 
 // Setup click outside listener
 onMounted(() => {
-  // Use capture phase and add a small delay to ensure DOM is ready
   setTimeout(() => {
     document.addEventListener('click', handleClickOutside, true)
   }, 100)
@@ -468,7 +570,6 @@ onUnmounted(() => {
 
 const selectAsteroid = (asteroid: Asteroid) => {
   emit('update:selectedAsteroid', asteroid)
-  // Reset search and filters after selection
   searchQuery.value = ''
   filters.value.hazardous = null
   filters.value.sizeRange = null
@@ -477,7 +578,6 @@ const selectAsteroid = (asteroid: Asteroid) => {
   isSearchFocused.value = false
   showDropdown.value = false
 
-  // Scroll to top of page
   window.scrollTo({
     top: 0,
     behavior: 'smooth'
@@ -491,9 +591,9 @@ const handleAnalyze = () => {
 }
 
 const showRandomAsteroid = () => {
-  if (props.asteroids.length > 0) {
-    const randomIndex = Math.floor(Math.random() * props.asteroids.length)
-    const randomAsteroid = props.asteroids[randomIndex]
+  if (filteredAsteroids.value.length > 0) {
+    const randomIndex = Math.floor(Math.random() * filteredAsteroids.value.length)
+    const randomAsteroid = filteredAsteroids.value[randomIndex]
     if (randomAsteroid) {
       selectAsteroid(randomAsteroid)
     }
@@ -505,29 +605,7 @@ const showHazardousOnly = () => {
   applyFilters()
 }
 
-const loadMoreFromNeo = async () => {
-  if (loadingMore.value) return
-
-  loadingMore.value = true
-  try {
-    emit('loadMore')
-  } catch (error) {
-    console.error('Failed to load more asteroids:', error)
-  } finally {
-    loadingMore.value = false
-  }
-}
-
-// Auto-load more data when user navigates to a page that needs more data
-const goToPage = async (page: number) => {
-  const requiredItems = page * itemsPerPage
-  const currentItems = filteredAsteroids.value.length
-
-  // If we need more items and API has more data, load it first
-  if (requiredItems > currentItems && props.hasMoreNeoResults && !loadingMore.value) {
-    await loadMoreFromNeo()
-  }
-
+const goToPage = (page: number) => {
   currentPage.value = page
 }
 
@@ -536,13 +614,35 @@ watch([filters, searchQuery], () => {
   currentPage.value = 1
 }, { deep: true })
 
-watch(paginatedResults, (newResults) => {
-  if (newResults.length > 0) {
-    stablePaginatedResults.value = newResults
-  }
-}, { immediate: true })
-
 watch(() => props.loadingAsteroids, (isLoading) => {
-  loadingSearch.value = isLoading && (isSearchFocused.value || Boolean(searchQuery.value))
+  loadingSearch.value = isLoading && props.isLoadingAll === true
 })
 </script>
+
+<style scoped>
+/* Force cursor and selection behavior for result items */
+.asteroid-result-item {
+  cursor: pointer !important;
+  user-select: none !important;
+  -webkit-user-select: none !important;
+  -moz-user-select: none !important;
+  -ms-user-select: none !important;
+}
+
+.asteroid-result-item * {
+  cursor: pointer !important;
+  user-select: none !important;
+  -webkit-user-select: none !important;
+  -moz-user-select: none !important;
+  -ms-user-select: none !important;
+}
+
+.asteroid-name {
+  cursor: pointer !important;
+}
+
+/* Purple highlight on hover */
+.asteroid-result-item:hover .asteroid-name {
+  color: rgb(216, 180, 254) !important; /* purple-300 */
+}
+</style>
