@@ -31,7 +31,9 @@
             <Select
               v-model="filters.hazardous"
               :options="hazardousOptions"
-              placeholder="Any"
+              optionLabel="label"
+              optionValue="value"
+              placeholder="All"
               class="w-full"
               @change="applyFilters"
             />
@@ -319,12 +321,13 @@ const filters = ref({
 
 // Filter option arrays
 const hazardousOptions = [
-  'Hazardous Only',
-  'Non-Hazardous',
-  'All'
+  { label: 'All', value: null },
+  { label: 'Hazardous Only', value: 'hazardous' },
+  { label: 'Non-Hazardous', value: 'non-hazardous' }
 ]
 
 const sizeRangeOptions = [
+  { label: 'All Sizes', value: null },
   { label: 'Small (< 1km)', value: 'small' },
   { label: 'Medium (1-10km)', value: 'medium' },
   { label: 'Large (> 10km)', value: 'large' }
@@ -340,7 +343,7 @@ const sortOptions = [
 
 // Computed properties
 const hasFilters = computed(() => {
-  return (filters.value.hazardous && filters.value.hazardous !== 'All') ||
+  return (filters.value.hazardous && filters.value.hazardous !== null) ||
          filters.value.sizeRange !== null ||
          filters.value.sortBy !== 'name'
 })
@@ -353,10 +356,10 @@ const filteredAsteroids = computed(() => {
   let filtered = [...props.asteroids]
 
   // Apply hazardous filter
-  if (filters.value.hazardous && filters.value.hazardous !== 'All') {
-    if (filters.value.hazardous === 'Hazardous Only') {
+  if (filters.value.hazardous) {
+    if (filters.value.hazardous === 'hazardous') {
       filtered = filtered.filter(asteroid => asteroid.is_potentially_hazardous_asteroid)
-    } else if (filters.value.hazardous === 'Non-Hazardous') {
+    } else if (filters.value.hazardous === 'non-hazardous') {
       filtered = filtered.filter(asteroid => !asteroid.is_potentially_hazardous_asteroid)
     }
   }
@@ -601,7 +604,7 @@ const showRandomAsteroid = () => {
 }
 
 const showHazardousOnly = () => {
-  filters.value.hazardous = 'Hazardous Only'
+  filters.value.hazardous = 'hazardous'
   applyFilters()
 }
 
