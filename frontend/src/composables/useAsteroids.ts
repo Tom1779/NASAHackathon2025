@@ -2,6 +2,7 @@ import { ref, type Ref } from 'vue'
 import type { Asteroid, CloseApproachData, EstimatedDiameter } from '../types/asteroid'
 import { fetchNeoData, fetchNeoDetails } from '../api/neo'
 import { fetchSmallBodyData } from '../api/sbdb'
+import { useIndexedDBCache } from './useIndexedDBCache'
 
 interface NeoApiDiameterRange {
   estimated_diameter_min?: number | string
@@ -137,35 +138,24 @@ const mapNeoToAsteroid = (neo: NeoApiObject): Asteroid => {
 const extractPhysParam = (params: SbdbPhysicalParam[], name: string): unknown =>
   params.find(param => param.name === name)?.value
 
-// In-memory cache instead of localStorage (localStorage is too small for 40K asteroids)
-let memoryCache: {
-  data: Asteroid[] | null
-  timestamp: number
-} = {
-  data: null,
-  timestamp: 0
-}
-
-const CACHE_DURATION = 24 * 60 * 60 * 1000 // 24 hours
-
 export function useAsteroids() {
-  const allAsteroids: Ref<Asteroid[]> = ref([]) // All loaded asteroids
-  const asteroids: Ref<Asteroid[]> = ref([]) // Filtered/searched asteroids
+  const { cachedAsteroids, isCacheLoaded, loadCache, saveCache } = useIndexedDBCache()
+  const allAsteroids: Ref<Asteroid[]> = ref([])
+  const asteroids: Ref<Asteroid[]> = ref([])
   const loading = ref(false)
   const error = ref<string | null>(null)
   const isLoadingAll = ref(false)
   const allDataLoaded = ref(false)
 
-  // Load asteroids from local JSON file
   const loadAllAsteroidsFromJson = async (): Promise<void> => {
     if (allDataLoaded.value) return
     
-    // Check in-memory cache first
-    if (memoryCache.data && (Date.now() - memoryCache.timestamp < CACHE_DURATION)) {
-      allAsteroids.value = memoryCache.data
-      asteroids.value = memoryCache.data
+    const cacheLoaded = await loadCache()
+    if (cacheLoaded && cachedAsteroids.value.length > 0) {
+      allAsteroids.value = cachedAsteroids.value
+      asteroids.value = cachedAsteroids.value
       allDataLoaded.value = true
-      console.log(`Loaded ${allAsteroids.value.length} asteroids from memory cache.`)
+      console.log(`✓ Using cached data (${allAsteroids.value.length} asteroids)`)
       return
     }
 
@@ -173,32 +163,100 @@ export function useAsteroids() {
     loading.value = true
     
     try {
-      console.log('Fetching asteroids from JSON file...')
+      console.log('📥 Loading asteroid data...')
       
-      // Fetch the local JSON file
-      const response = await fetch('/all_neo_data.json')
-      if (!response.ok) {
-        throw new Error(`Failed to load asteroids: ${response.statusText}`)
+      // Base URL for chunks (GitHub Pages, Netlify, Cloudflare Pages, etc.)
+      const baseUrl = import.meta.env.VITE_NEO_BASE_URL || 'https://yourusername.github.io/neo-asteroid-data/chunks'
+      
+      // Load manifest first
+      const manifestUrl = `${baseUrl}/manifest.json`
+      console.log('📄 Loading manifest...')
+      
+      const manifestResponse = await fetch(manifestUrl)
+      
+      if (!manifestResponse.ok) {
+        throw new Error(`Failed to load manifest: ${manifestResponse.statusText}`)
       }
       
-      const data = await response.json()
-      const neoObjects = data.near_earth_objects || []
+      const manifest = await manifestResponse.json()
+      const totalChunks = manifest.total_chunks
+      console.log(`📦 Loading ${totalChunks} chunks (${manifest.total_asteroids} total asteroids)`)
       
-      console.log(`Processing ${neoObjects.length} asteroid records...`)
+      const allLoadedAsteroids: any[] = []
       
-      allAsteroids.value = neoObjects.map((neo: any) => mapNeoToAsteroid(neo))
-      asteroids.value = allAsteroids.value
+      // Load chunks in parallel batches
+      const BATCH_SIZE = 5 // Can be higher since it's a real CDN
+      
+      for (let batchStart = 0; batchStart < totalChunks; batchStart += BATCH_SIZE) {
+        const batchEnd = Math.min(batchStart + BATCH_SIZE, totalChunks)
+        const batchPromises = []
+        
+        for (let i = batchStart; i < batchEnd; i++) {
+          const chunkUrl = `${baseUrl}/neo_chunk_${String(i).padStart(3, '0')}.json`
+          
+          batchPromises.push(
+            fetch(chunkUrl)
+              .then(response => {
+                if (!response.ok) {
+                  console.warn(`⚠️ Failed to load chunk ${i} (${response.status})`)
+                  return null
+                }
+                return response.json()
+              })
+              .catch(err => {
+                console.warn(`⚠️ Error loading chunk ${i}:`, err)
+                return null
+              })
+          )
+        }
+        
+        const batchResults = await Promise.all(batchPromises)
+        
+        for (const chunkData of batchResults) {
+          if (chunkData?.asteroids) {
+            allLoadedAsteroids.push(...chunkData.asteroids)
+          }
+        }
+        
+        const progress = ((batchEnd / totalChunks) * 100).toFixed(1)
+        console.log(`  ✓ Loaded chunks ${batchStart}-${batchEnd-1} (${progress}%) - ${allLoadedAsteroids.length} asteroids total`)
+        
+        // Yield to browser every batch to prevent blocking
+        await new Promise(resolve => setTimeout(resolve, 0))
+      }
+      
+      console.log(`⚙️ Processing ${allLoadedAsteroids.length} asteroid records in batches...`)
+      
+      // Process asteroids in batches to avoid blocking main thread
+      const PROCESS_BATCH_SIZE = 1000
+      const processedAsteroids: Asteroid[] = []
+      
+      for (let i = 0; i < allLoadedAsteroids.length; i += PROCESS_BATCH_SIZE) {
+        const batch = allLoadedAsteroids.slice(i, i + PROCESS_BATCH_SIZE)
+        const processed = batch.map((neo: any) => mapNeoToAsteroid(neo))
+        processedAsteroids.push(...processed)
+        
+        // Yield to browser after each batch
+        if (i % (PROCESS_BATCH_SIZE * 5) === 0) {
+          const progress = ((i / allLoadedAsteroids.length) * 100).toFixed(1)
+          console.log(`  Processing: ${progress}%`)
+          await new Promise(resolve => setTimeout(resolve, 0))
+        }
+      }
+      
+      allAsteroids.value = processedAsteroids
+      asteroids.value = processedAsteroids
       allDataLoaded.value = true
       
-      // Save to in-memory cache
-      memoryCache = {
-        data: allAsteroids.value,
-        timestamp: Date.now()
-      }
+      console.log('💾 Caching to IndexedDB in background...')
+      // Cache in background without blocking
+      saveCache(processedAsteroids).catch(err => {
+        console.warn('Failed to cache:', err)
+      })
       
-      console.log(`Successfully loaded ${allAsteroids.value.length} asteroids.`)
+      console.log(`✅ Successfully loaded ${allAsteroids.value.length} asteroids!`)
     } catch (err) {
-      console.error('Error loading asteroids from JSON:', err)
+      console.error('❌ Error loading asteroids:', err)
       error.value = err instanceof Error ? err.message : 'Failed to load asteroids'
       throw err
     } finally {
@@ -207,9 +265,7 @@ export function useAsteroids() {
     }
   }
 
-  // Search asteroids locally
   const searchAsteroids = async (query: string): Promise<Asteroid[]> => {
-    // Ensure all data is loaded first
     if (!allDataLoaded.value) {
       await loadAllAsteroidsFromJson()
     }
@@ -221,7 +277,6 @@ export function useAsteroids() {
       return asteroids.value
     }
 
-    // Search by name and ID
     asteroids.value = allAsteroids.value.filter(asteroid => 
       asteroid.name.toLowerCase().includes(trimmedQuery) ||
       asteroid.id.toLowerCase().includes(trimmedQuery) ||
@@ -232,7 +287,6 @@ export function useAsteroids() {
     return asteroids.value
   }
 
-  // Legacy compatibility - no pagination needed with local data
   const loadMoreAsteroids = async (): Promise<Asteroid[]> => {
     return asteroids.value
   }
@@ -244,7 +298,6 @@ export function useAsteroids() {
   }
 
   const fetchAsteroids = async () => {
-    // For backwards compatibility, just load all asteroids
     await loadAllAsteroidsFromJson()
   }
 
