@@ -121,6 +121,9 @@ const mapNeoToAsteroid = (neo: NeoApiObject): Asteroid => {
   const id = neo.id ?? neo.neo_reference_id ?? ''
   const referenceId = neo.neo_reference_id ?? neo.id ?? ''
 
+  // Extract any additional fields that might be in the raw data
+  const rawNeo = neo as any
+
   return {
     links: { self: asString(neo.links?.self) },
     id: String(id),
@@ -132,6 +135,11 @@ const mapNeoToAsteroid = (neo: NeoApiObject): Asteroid => {
     is_potentially_hazardous_asteroid: asBoolean(neo.is_potentially_hazardous_asteroid, false),
     close_approach_data: closeApproach,
     is_sentry_object: asBoolean(neo.is_sentry_object, false),
+    // Include spectral types if they exist in the data
+    tholen_spectral_type: asString(rawNeo.tholen_spectral_type) || undefined,
+    smassii_spectral_type: asString(rawNeo.smassii_spectral_type) || undefined,
+    diameter_km: toNumber(rawNeo.diameter_km, undefined),
+    geometric_albedo: toNumber(rawNeo.geometric_albedo, undefined),
   }
 }
 
@@ -165,8 +173,11 @@ export function useAsteroids() {
     try {
       console.log('📥 Loading asteroid data...')
       
-      // Base URL for chunks (GitHub Pages, Netlify, Cloudflare Pages, etc.)
-      const baseUrl = import.meta.env.VITE_NEO_BASE_URL || 'https://yourusername.github.io/neo-asteroid-data/chunks'
+      // Base URL for chunks with fallback to your GitHub repo
+      const baseUrl = import.meta.env.VITE_NEO_BASE_URL || 
+                      'https://raw.githubusercontent.com/Tom1779/neo-asteroid-data/main/chunks'
+      
+      console.log(`📍 Using base URL: ${baseUrl}`)
       
       // Load manifest first
       const manifestUrl = `${baseUrl}/manifest.json`
@@ -307,12 +318,54 @@ export function useAsteroids() {
     if (!id) return undefined
     if (detailsCache.has(id)) return detailsCache.get(id)
 
+    // First, get the existing asteroid from our loaded data
+    const existingAsteroid = allAsteroids.value.find(a => a.id === id || a.neo_reference_id === id)
+
     try {
       const sbdbRaw = (await fetchSmallBodyData(id)) as SbdbResponse
       const objectRecord = getRecord(sbdbRaw.object) ?? getRecord(sbdbRaw)
       const orbitRecord = getRecord(sbdbRaw.orbit)
       const physPar = toPhysicalParams(sbdbRaw.phys_par)
 
+      // Extract spectral types and physical data from SBDB
+      const tholen_spectral_type = asString(extractPhysParam(physPar, 'spec_T')) || undefined
+      const smassii_spectral_type = asString(extractPhysParam(physPar, 'spec_B')) || undefined
+      
+      const diameter_km = (() => {
+        const value = extractPhysParam(physPar, 'diameter')
+        const numeric = toNumber(value, Number.NaN)
+        return Number.isNaN(numeric) ? undefined : numeric
+      })()
+      
+      const geometric_albedo = (() => {
+        const value = extractPhysParam(physPar, 'albedo')
+        const numeric = toNumber(value, Number.NaN)
+        return Number.isNaN(numeric) ? undefined : numeric
+      })()
+
+      // If we have the asteroid in our data, merge SBDB data with existing data
+      if (existingAsteroid) {
+        const enriched: Asteroid = {
+          ...existingAsteroid, // Keep all original NEO data
+          // Only add SBDB fields
+          tholen_spectral_type,
+          smassii_spectral_type,
+          diameter_km,
+          geometric_albedo,
+        }
+
+        detailsCache.set(id, enriched)
+        
+        // Update in allAsteroids array
+        const index = allAsteroids.value.findIndex(a => a.id === id || a.neo_reference_id === id)
+        if (index !== -1) {
+          allAsteroids.value[index] = enriched
+        }
+        
+        return enriched
+      }
+
+      // If not found in our data, build from scratch (fallback)
       const name =
         (objectRecord &&
           (asString(objectRecord['full_name'])
@@ -344,18 +397,10 @@ export function useAsteroids() {
         ),
         close_approach_data: [],
         is_sentry_object: false,
-        tholen_spectral_type: asString(extractPhysParam(physPar, 'spec_T')) || undefined,
-        smassii_spectral_type: asString(extractPhysParam(physPar, 'spec_B')) || undefined,
-        diameter_km: (() => {
-          const value = extractPhysParam(physPar, 'diameter')
-          const numeric = toNumber(value, Number.NaN)
-          return Number.isNaN(numeric) ? undefined : numeric
-        })(),
-        geometric_albedo: (() => {
-          const value = extractPhysParam(physPar, 'albedo')
-          const numeric = toNumber(value, Number.NaN)
-          return Number.isNaN(numeric) ? undefined : numeric
-        })(),
+        tholen_spectral_type,
+        smassii_spectral_type,
+        diameter_km,
+        geometric_albedo,
       }
 
       detailsCache.set(id, asteroid)
@@ -379,6 +424,10 @@ export function useAsteroids() {
             ...mapped,
             estimated_diameter: mergedDiameter,
             absolute_magnitude_h: mapped.absolute_magnitude_h || asteroid.absolute_magnitude_h,
+            tholen_spectral_type,
+            smassii_spectral_type,
+            diameter_km,
+            geometric_albedo,
           }
 
           detailsCache.set(id, enriched)
@@ -391,7 +440,7 @@ export function useAsteroids() {
       return asteroid
     } catch (sbdbError) {
       console.warn('SBDB lookup failed for', id, sbdbError)
-      return undefined
+      return existingAsteroid
     }
   }
 

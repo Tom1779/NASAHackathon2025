@@ -5,6 +5,7 @@
         <div class="flex items-center gap-2 text-white">
           <i class="pi pi-search text-purple-400"></i>
           Find Asteroid
+          <i v-if="fetchingDetails" class="pi pi-spin pi-spinner text-purple-400 ml-auto text-sm"></i>
         </div>
       </template>
       <template #content>
@@ -258,6 +259,12 @@
             <div class="text-purple-300">Magnitude:</div>
             <div class="text-white">{{ selectedAsteroid.absolute_magnitude_h.toFixed(2) }}</div>
           </div>
+          
+          <!-- Loading details indicator -->
+          <div v-if="fetchingDetails" class="mt-2 text-xs text-purple-300 flex items-center gap-2">
+            <i class="pi pi-spin pi-spinner"></i>
+            Loading spectral data...
+          </div>
         </div>
 
         <!-- Action Button -->
@@ -292,6 +299,7 @@ interface Props {
   loadingAsteroids: boolean
   isLoadingAll?: boolean
   allDataLoaded?: boolean
+  fetchDetailsForId?: (id: string) => Promise<Asteroid | undefined>
 }
 
 interface Emits {
@@ -308,9 +316,10 @@ const searchQuery = ref('')
 const isSearchFocused = ref(false)
 const loadingSearch = ref(false)
 const showDropdown = ref(false)
+const fetchingDetails = ref(false)
 let searchDebounceHandle: ReturnType<typeof setTimeout> | null = null
 const currentPage = ref(1)
-const itemsPerPage = 20 // Changed from 100 to 20
+const itemsPerPage = 20
 
 // Filter options
 const filters = ref({
@@ -364,14 +373,12 @@ const filteredAsteroids = computed(() => {
     }
   }
 
-  // Apply size filter (based on estimated diameter in kilometers)
+  // Apply size filter
   if (filters.value.sizeRange) {
     filtered = filtered.filter(asteroid => {
-      // Get diameter from estimated_diameter (use average of min/max)
       const diameterKm = asteroid.estimated_diameter?.kilometers
       
       if (!diameterKm) {
-        // Fallback to magnitude-based estimation if diameter not available
         const magnitude = asteroid.absolute_magnitude_h
         switch (filters.value.sizeRange) {
           case 'small': return magnitude > 22
@@ -381,14 +388,12 @@ const filteredAsteroids = computed(() => {
         }
       }
       
-      // Calculate average diameter
       const avgDiameter = (diameterKm.estimated_diameter_min + diameterKm.estimated_diameter_max) / 2
       
-      // Size ranges based on actual diameter
       switch (filters.value.sizeRange) {
-        case 'small': return avgDiameter < 1      // Less than 1 km
-        case 'medium': return avgDiameter >= 1 && avgDiameter < 10  // 1-10 km
-        case 'large': return avgDiameter >= 10    // 10+ km
+        case 'small': return avgDiameter < 1
+        case 'medium': return avgDiameter >= 1 && avgDiameter < 10
+        case 'large': return avgDiameter >= 10
         default: return true
       }
     })
@@ -400,7 +405,7 @@ const filteredAsteroids = computed(() => {
       case 'name':
         return a.name.localeCompare(b.name)
       case 'size-desc':
-        return a.absolute_magnitude_h - b.absolute_magnitude_h // Lower magnitude = larger
+        return a.absolute_magnitude_h - b.absolute_magnitude_h
       case 'size-asc':
         return b.absolute_magnitude_h - a.absolute_magnitude_h
       case 'magnitude':
@@ -421,9 +426,7 @@ const filteredAsteroids = computed(() => {
 const defaultResults = computed(() => {
   if (searchQuery.value.trim()) return []
   
-  // Show interesting asteroids by default
   const featured = filteredAsteroids.value.filter(asteroid => {
-    // Famous or interesting asteroids
     const name = asteroid.name.toLowerCase()
     return name.includes('apophis') ||
            name.includes('bennu') ||
@@ -435,9 +438,7 @@ const defaultResults = computed(() => {
            asteroid.is_potentially_hazardous_asteroid
   })
   
-  // If we have featured asteroids, return them
   if (featured.length > 0) {
-    // Sort hazardous first, then by size (smaller magnitude = larger)
     return featured.sort((a, b) => {
       if (a.is_potentially_hazardous_asteroid && !b.is_potentially_hazardous_asteroid) return -1
       if (!a.is_potentially_hazardous_asteroid && b.is_potentially_hazardous_asteroid) return 1
@@ -445,7 +446,6 @@ const defaultResults = computed(() => {
     })
   }
   
-  // Fallback: show first batch of filtered asteroids
   return filteredAsteroids.value.slice(0, 100)
 })
 
@@ -477,7 +477,7 @@ const totalPages = computed(() => {
   return Math.max(Math.ceil(totalMatches.value / itemsPerPage), 1)
 })
 
-// Paginate results - show name matches first, then ID matches
+// Paginate results
 const paginatedNameMatches = computed(() => {
   const start = (currentPage.value - 1) * itemsPerPage
   const end = start + itemsPerPage
@@ -493,16 +493,13 @@ const paginatedIdMatches = computed(() => {
   const start = (currentPage.value - 1) * itemsPerPage
   const end = start + itemsPerPage
   
-  // If we're still showing name matches, don't show ID matches yet
   if (start < nameMatches.value.length) {
-    // Calculate remaining slots after name matches
     const remainingSlots = end - nameMatches.value.length
     if (remainingSlots <= 0) return []
     
     return idMatches.value.slice(0, remainingSlots)
   }
   
-  // We've gone past all name matches, now show ID matches
   const idStart = start - nameMatches.value.length
   const idEnd = end - nameMatches.value.length
   
@@ -528,7 +525,6 @@ const onSearchFocus = () => {
 }
 
 const onSearchBlur = () => {
-  // Don't close on blur - handle via click-outside
   return
 }
 
@@ -541,7 +537,6 @@ const applyFilters = () => {
   currentPage.value = 1
 }
 
-// Close dropdown when clicking outside
 const handleClickOutside = (event: MouseEvent) => {
   const target = event.target as HTMLElement
 
@@ -556,7 +551,6 @@ const handleClickOutside = (event: MouseEvent) => {
   }
 }
 
-// Setup click outside listener
 onMounted(() => {
   setTimeout(() => {
     document.addEventListener('click', handleClickOutside, true)
@@ -571,7 +565,8 @@ onUnmounted(() => {
   }
 })
 
-const selectAsteroid = (asteroid: Asteroid) => {
+// UPDATED: Fetch details when asteroid is selected
+const selectAsteroid = async (asteroid: Asteroid) => {
   emit('update:selectedAsteroid', asteroid)
   searchQuery.value = ''
   filters.value.hazardous = null
@@ -585,6 +580,24 @@ const selectAsteroid = (asteroid: Asteroid) => {
     top: 0,
     behavior: 'smooth'
   })
+
+  // Fetch detailed data (spectral types, etc.) if not already present
+  if (props.fetchDetailsForId && !asteroid.tholen_spectral_type && !asteroid.smassii_spectral_type) {
+    fetchingDetails.value = true
+    console.log(`🔍 Fetching detailed data for ${asteroid.name}...`)
+    
+    try {
+      const detailed = await props.fetchDetailsForId(asteroid.id)
+      if (detailed) {
+        emit('update:selectedAsteroid', detailed)
+        console.log(`✓ Loaded spectral type: ${detailed.tholen_spectral_type || detailed.smassii_spectral_type || 'Unknown'}`)
+      }
+    } catch (error) {
+      console.warn('Could not fetch details:', error)
+    } finally {
+      fetchingDetails.value = false
+    }
+  }
 }
 
 const handleAnalyze = () => {

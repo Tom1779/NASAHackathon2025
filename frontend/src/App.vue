@@ -18,6 +18,7 @@
             :loading-asteroids="loadingAsteroids"
             :is-loading-all="isLoadingAll"
             :all-data-loaded="allDataLoaded"
+            :fetch-details-for-id="fetchDetailsForId"
             @update:selected-asteroid="onSelectAsteroid"
             @analyze="onAnalyzeAsteroid"
             @search="onSearchAsteroids"
@@ -90,7 +91,7 @@ const onSearchAsteroids = async (query: string) => {
 
 // Lifecycle
 onMounted(async () => {
-  // Load all asteroids from local JSON file
+  // Load all asteroids from JSON chunks
   try {
     console.log('Loading all asteroids from JSON...')
     await loadAllAsteroidsFromJson()
@@ -100,24 +101,12 @@ onMounted(async () => {
   }
 })
 
-// Handle asteroid selection
-const onSelectAsteroid = async (astro: Asteroid | null) => {
-  if (!astro) {
-    selectedAsteroid.value = null
-    return
-  }
-
-  // If this is a lightweight entry (no JPL url or zero magnitude),
-  // fetch full details first. Otherwise, use as-is.
-  if (!astro.nasa_jpl_url || astro.absolute_magnitude_h === 0) {
-    const full = await fetchDetailsForId(astro.id)
-    if (full) {
-      selectedAsteroid.value = full
-      return
-    }
-  }
-
-  selectedAsteroid.value = astro
+// Handle asteroid selection - simplified
+const onSelectAsteroid = async (asteroid: Asteroid | null) => {
+  selectedAsteroid.value = asteroid
+  
+  // The AsteroidSelector component will handle fetching details
+  // We just need to update our selectedAsteroid ref when it does
 }
 </script>
 
