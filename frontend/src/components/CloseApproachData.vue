@@ -56,3 +56,65 @@ interface Props {
 
 defineProps<Props>()
 </script>
+
+<style scoped>
+/* Small screens - focus on date badge and cell spacing */
+@media (max-width: 600px) {
+  :deep(.p-badge) {
+    font-size: 0.45rem !important;
+    padding: 0.1rem 0.2rem !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    max-width: 80px !important;
+  }
+  
+  :deep(.p-datatable .p-datatable-tbody > tr > td) {
+    padding: 0.3rem 0.1rem !important;
+    font-size: 0.7rem;
+  }
+  
+  /* First column (date) needs more right spacing */
+  :deep(.p-datatable .p-datatable-tbody > tr > td:first-child) {
+    padding: 0.3rem 0.4rem 0.3rem 0.1rem !important;
+  }
+  
+  :deep(.p-datatable .p-datatable-thead > tr > th) {
+    padding: 0.3rem 0.1rem !important;
+    font-size: 0.65rem;
+  }
+  
+  /* First header needs more right spacing too */
+  :deep(.p-datatable .p-datatable-thead > tr > th:first-child) {
+    padding: 0.3rem 0.4rem 0.3rem 0.1rem !important;
+  }
+}
+
+/* Ultra small screens - even more aggressive spacing */
+@media (max-width: 406px) {
+  :deep(.p-badge) {
+    font-size: 0.4rem !important;
+    padding: 0.05rem 0.15rem !important;
+    max-width: 60px !important;
+  }
+  
+  :deep(.p-datatable .p-datatable-tbody > tr > td) {
+    padding: 0.2rem 0.05rem !important;
+    font-size: 0.6rem;
+  }
+  
+  /* First column (date) needs some right spacing even on tiny screens */
+  :deep(.p-datatable .p-datatable-tbody > tr > td:first-child) {
+    padding: 0.2rem 0.25rem 0.2rem 0.05rem !important;
+  }
+  
+  :deep(.p-datatable .p-datatable-thead > tr > th) {
+    padding: 0.2rem 0.05rem !important;
+    font-size: 0.55rem;
+  }
+  
+  :deep(.p-datatable .p-datatable-thead > tr > th:first-child) {
+    padding: 0.2rem 0.25rem 0.2rem 0.05rem !important;
+  }
+}
+</style>

@@ -1,235 +1,419 @@
 import { ref, type Ref } from 'vue'
-import type { Asteroid } from '../types/asteroid'
+import type { Asteroid, CloseApproachData, EstimatedDiameter } from '../types/asteroid'
+import { fetchNeoData, fetchNeoDetails, fetchNeoBrowsePage, searchNeos, browseNeos } from '../api/neo'
+import { fetchSmallBodyData } from '../api/sbdb'
+import {
+  fetchCatalogEntries,
+  catalogEntriesToAsteroids,
+  preloadCatalog,
+} from '../utils/catalogLoader'
+import { useAsteroidCache } from './useAsteroidCache';
+
+interface NeoApiDiameterRange {
+  estimated_diameter_min?: number | string
+  estimated_diameter_max?: number | string
+}
+
+interface NeoApiEstimatedDiameter {
+  kilometers?: NeoApiDiameterRange
+  meters?: NeoApiDiameterRange
+  feet?: NeoApiDiameterRange
+  miles?: NeoApiDiameterRange
+}
+
+interface NeoApiObject {
+  links?: { self?: unknown }
+  id?: string | number
+  neo_reference_id?: string | number
+  name?: unknown
+  nasa_jpl_url?: unknown
+  absolute_magnitude_h?: unknown
+  estimated_diameter?: NeoApiEstimatedDiameter
+  is_potentially_hazardous_asteroid?: unknown
+  close_approach_data?: unknown
+  is_sentry_object?: unknown
+}
+
+interface SbdbPhysicalParam {
+  name?: string
+  value?: unknown
+}
+
+interface SbdbResponse {
+  object?: unknown
+  phys_par?: unknown
+  orbit?: unknown
+  [key: string]: unknown
+}
+
+// Load all NEO asteroids from catalog (now filtered to ~40K NEO-only entries)
+const CATALOG_PAGE_SIZE = 50000
+
+const toNumber = (value: unknown, fallback = 0): number => {
+  if (value === undefined || value === null || value === '') return fallback
+  if (typeof value === 'number') return Number.isNaN(value) ? fallback : value
+  const num = Number(value)
+  return Number.isNaN(num) ? fallback : num
+}
+
+const asString = (value: unknown, fallback = ''): string => {
+  if (typeof value === 'string') return value
+  if (typeof value === 'number' || typeof value === 'bigint') return String(value)
+  return fallback
+}
+
+const asBoolean = (value: unknown, fallback = false): boolean => {
+  if (typeof value === 'boolean') return value
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase()
+    if (normalized === 'true') return true
+    if (normalized === 'false') return false
+  }
+  if (typeof value === 'number') return value !== 0
+  return fallback
+}
+
+const getRecord = (value: unknown): Record<string, unknown> | null => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  return value as Record<string, unknown>
+}
+
+const isNeoApiObject = (value: unknown): value is NeoApiObject =>
+  typeof value === 'object' && value !== null
+
+const flattenNearEarthObjects = (grouped: unknown): NeoApiObject[] => {
+  if (!grouped || typeof grouped !== 'object') return []
+  return Object.values(grouped as Record<string, unknown>).flatMap(value => {
+    if (!Array.isArray(value)) return []
+    return value.filter(isNeoApiObject)
+  })
+}
+
+const toEstimatedDiameter = (source?: NeoApiEstimatedDiameter): EstimatedDiameter => {
+  const result: EstimatedDiameter = {}
+
+  const assignRange = (range?: NeoApiDiameterRange) => {
+    if (!range) return undefined
+    const min = toNumber(range.estimated_diameter_min, Number.NaN)
+    const max = toNumber(range.estimated_diameter_max, Number.NaN)
+    if (Number.isNaN(min) || Number.isNaN(max)) return undefined
+    return {
+      estimated_diameter_min: min,
+      estimated_diameter_max: max,
+    }
+  }
+
+  const km = assignRange(source?.kilometers)
+  if (km) result.kilometers = km
+  const m = assignRange(source?.meters)
+  if (m) result.meters = m
+  const ft = assignRange(source?.feet)
+  if (ft) result.feet = ft
+  const mi = assignRange(source?.miles)
+  if (mi) result.miles = mi
+
+  return result
+}
+
+const toPhysicalParams = (value: unknown): SbdbPhysicalParam[] => {
+  if (!Array.isArray(value)) return []
+  return value
+    .filter(item => item && typeof item === 'object')
+    .map(item => {
+      const record = item as Record<string, unknown>
+      return {
+        name: typeof record.name === 'string' ? record.name : undefined,
+        value: record.value,
+      }
+    })
+}
+
+const mapNeoToAsteroid = (neo: NeoApiObject): Asteroid => {
+  const estimated = toEstimatedDiameter(neo.estimated_diameter)
+  const closeApproach = Array.isArray(neo.close_approach_data)
+    ? (neo.close_approach_data as CloseApproachData[])
+    : []
+
+  const id = neo.id ?? neo.neo_reference_id ?? ''
+  const referenceId = neo.neo_reference_id ?? neo.id ?? ''
+
+  return {
+    links: { self: asString(neo.links?.self) },
+    id: String(id),
+    neo_reference_id: String(referenceId),
+    name: asString(neo.name, 'Unknown'),
+    nasa_jpl_url: asString(neo.nasa_jpl_url),
+    absolute_magnitude_h: toNumber(neo.absolute_magnitude_h, 0),
+    estimated_diameter: estimated,
+    is_potentially_hazardous_asteroid: asBoolean(neo.is_potentially_hazardous_asteroid, false),
+    close_approach_data: closeApproach,
+    is_sentry_object: asBoolean(neo.is_sentry_object, false),
+  }
+}
+
+const extractPhysParam = (params: SbdbPhysicalParam[], name: string): unknown =>
+  params.find(param => param.name === name)?.value
 
 export function useAsteroids() {
+  const { cachedAsteroids, isCacheLoaded, saveCache } = useAsteroidCache();
   const asteroids: Ref<Asteroid[]> = ref([])
   const loading = ref(false)
   const error = ref<string | null>(null)
 
-  // Mock data for development
-  const mockAsteroids: Asteroid[] = [
-    {
-      links: {
-        self: 'http://api.nasa.gov/neo/rest/v1/neo/2465633?api_key=DEMO_KEY',
-      },
-      id: '2465633',
-      neo_reference_id: '2465633',
-      name: '465633 (2009 JR5)',
-      nasa_jpl_url: 'https://ssd.jpl.nasa.gov/tools/sbdb_lookup.html#/?sstr=2465633',
-      absolute_magnitude_h: 20.44,
-      estimated_diameter: {
-        kilometers: {
-          estimated_diameter_min: 0.2170475943,
-          estimated_diameter_max: 0.4853331752,
-        },
-        meters: {
-          estimated_diameter_min: 217.0475943071,
-          estimated_diameter_max: 485.3331752235,
-        },
-        miles: {
-          estimated_diameter_min: 0.1348670807,
-          estimated_diameter_max: 0.3015719604,
-        },
-        feet: {
-          estimated_diameter_min: 712.0984293066,
-          estimated_diameter_max: 1592.3004946003,
-        },
-      },
-      is_potentially_hazardous_asteroid: true,
-      close_approach_data: [
-        {
-          close_approach_date: '2015-09-08',
-          close_approach_date_full: '2015-Sep-08 20:28',
-          epoch_date_close_approach: 1441744080000,
-          relative_velocity: {
-            kilometers_per_second: '18.1279360862',
-            kilometers_per_hour: '65260.5699103704',
-            miles_per_hour: '40550.3802312521',
-          },
-          miss_distance: {
-            astronomical: '0.3027469457',
-            lunar: '117.7685618773',
-            kilometers: '45290298.225725659',
-            miles: '28142086.3515817342',
-          },
-          orbiting_body: 'Earth',
-        },
-      ],
-      is_sentry_object: false,
-    },
-    {
-      links: {
-        self: 'http://api.nasa.gov/neo/rest/v1/neo/3542519?api_key=DEMO_KEY',
-      },
-      id: '3542519',
-      neo_reference_id: '3542519',
-      name: 'Bennu (101955)',
-      nasa_jpl_url: 'https://ssd.jpl.nasa.gov/tools/sbdb_lookup.html#/?sstr=3542519',
-      absolute_magnitude_h: 20.9,
-      estimated_diameter: {
-        kilometers: {
-          estimated_diameter_min: 0.44,
-          estimated_diameter_max: 0.492,
-        },
-        meters: {
-          estimated_diameter_min: 440,
-          estimated_diameter_max: 492,
-        },
-        miles: {
-          estimated_diameter_min: 0.273,
-          estimated_diameter_max: 0.305,
-        },
-        feet: {
-          estimated_diameter_min: 1443,
-          estimated_diameter_max: 1614,
-        },
-      },
-      is_potentially_hazardous_asteroid: false,
-      close_approach_data: [
-        {
-          close_approach_date: '2023-09-24',
-          close_approach_date_full: '2023-Sep-24 18:11',
-          epoch_date_close_approach: 1695573060000,
-          relative_velocity: {
-            kilometers_per_second: '27.7403',
-            kilometers_per_hour: '99865.1',
-            miles_per_hour: '62058.8',
-          },
-          miss_distance: {
-            astronomical: '0.3225',
-            lunar: '125.45',
-            kilometers: '48250000',
-            miles: '29980000',
-          },
-          orbiting_body: 'Earth',
-        },
-      ],
-      is_sentry_object: false,
-    },
-    {
-      links: {
-        self: 'http://api.nasa.gov/neo/rest/v1/neo/2000433?api_key=DEMO_KEY',
-      },
-      id: '2000433',
-      neo_reference_id: '2000433',
-      name: '433 Eros',
-      nasa_jpl_url: 'https://ssd.jpl.nasa.gov/tools/sbdb_lookup.html#/?sstr=2000433',
-      absolute_magnitude_h: 11.16,
-      estimated_diameter: {
-        kilometers: {
-          estimated_diameter_min: 16.84,
-          estimated_diameter_max: 33.68,
-        },
-        meters: {
-          estimated_diameter_min: 16840,
-          estimated_diameter_max: 33680,
-        },
-        miles: {
-          estimated_diameter_min: 10.46,
-          estimated_diameter_max: 20.93,
-        },
-        feet: {
-          estimated_diameter_min: 55249,
-          estimated_diameter_max: 110499,
-        },
-      },
-      is_potentially_hazardous_asteroid: false,
-      close_approach_data: [],
-      is_sentry_object: false,
-    },
-  ]
 
-  // Function to generate large mock dataset
-  const generateLargeMockDataset = (): Asteroid[] => {
-    const baseNames = [
-      'Apophis', 'Bennu', 'Ryugu', 'Eros', 'Vesta', 'Ceres', 'Pallas', 'Juno',
-      'Hygiea', 'Psyche', 'Lutetia', 'Mathilde', 'Gaspra', 'Ida', 'Dactyl',
-      'Itokawa', 'Steins', 'Annefrank', 'Braille', 'Tempel', 'Hartley',
-      'Wild', 'Borrelly', 'Halley', 'Encke', 'Giacobini', 'Grigg', 'Holmes',
-      'Machholz', 'McNaught', 'NEOWISE', 'Hale-Bopp', 'Hyakutake', 'Levy',
-      'Shoemaker', 'LINEAR', 'NEAT', 'Catalina', 'Spacewatch', 'LONEOS'
-    ]
-    
-    const suffixes = [
-      'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M',
-      'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z',
-      '1', '2', '3', '4', '5', '6', '7', '8', '9', '0'
-    ]
+  // NEO Browse state
+  const neoPage = ref(0)
+  const neoHasMore = ref(true)
+  const neoQuery = ref('')
+  const neoInitialized = ref(false)
+  const isLoadingAll = ref(false)
+  const allDataLoaded = ref(false)
 
-    const yearCodes = ['2020', '2021', '2022', '2023', '2024', '2025']
-    const monthCodes = ['AA', 'AB', 'AC', 'AD', 'AE', 'AF', 'AG', 'AH', 'AI', 'AJ', 'AK', 'AL']
+  // Legacy catalog state (kept for compatibility)
+  const catalogQuery = ref('')
+  const catalogHasMore = ref(false)
+  const catalogCursor = ref<string | null>(null)
+  const catalogScanned = ref(0)
+  const catalogInitialized = ref(false)
+  const catalogAbort = ref<AbortController | null>(null)
 
-    const mockDataset: Asteroid[] = []
-    
-    // Generate 5000 asteroids for testing
-    for (let i = 0; i < 5000; i++) {
-      const baseName = baseNames[Math.floor(Math.random() * baseNames.length)]
-      const suffix = suffixes[Math.floor(Math.random() * suffixes.length)]
-      const year = yearCodes[Math.floor(Math.random() * yearCodes.length)]
-      const month = monthCodes[Math.floor(Math.random() * monthCodes.length)]
-      const number = Math.floor(Math.random() * 999) + 1
-      
-      const id = `${1000000 + i}`
-      const name = `${number} ${baseName} (${year} ${month}${suffix})`
-      const magnitude = Math.random() * 30 + 10 // 10-40 range
-      const isHazardous = Math.random() < 0.15 // 15% hazardous
-      const diameter = Math.pow(10, (6.259 - 0.4 * magnitude)) // Approximate formula
-      
-      const asteroid: Asteroid = {
-        links: {
-          self: `http://api.nasa.gov/neo/rest/v1/neo/${id}?api_key=DEMO_KEY`,
-        },
-        id: id,
-        neo_reference_id: id,
-        name: name,
-        nasa_jpl_url: `https://ssd.jpl.nasa.gov/tools/sbdb_lookup.html#/?sstr=${id}`,
-        absolute_magnitude_h: Math.round(magnitude * 100) / 100,
-        estimated_diameter: {
-          kilometers: {
-            estimated_diameter_min: diameter * 0.8,
-            estimated_diameter_max: diameter * 1.2,
-          },
-          meters: {
-            estimated_diameter_min: diameter * 800,
-            estimated_diameter_max: diameter * 1200,
-          },
-          miles: {
-            estimated_diameter_min: diameter * 0.497,
-            estimated_diameter_max: diameter * 0.746,
-          },
-          feet: {
-            estimated_diameter_min: diameter * 2624,
-            estimated_diameter_max: diameter * 3937,
-          },
-        },
-        is_potentially_hazardous_asteroid: isHazardous,
-        close_approach_data: [
-          {
-            close_approach_date: `${2025 + Math.floor(Math.random() * 5)}-${String(Math.floor(Math.random() * 12) + 1).padStart(2, '0')}-${String(Math.floor(Math.random() * 28) + 1).padStart(2, '0')}`,
-            close_approach_date_full: `${2025 + Math.floor(Math.random() * 5)}-Jan-01 12:00`,
-            epoch_date_close_approach: Date.now() + Math.random() * 157788000000, // Random future date
-            relative_velocity: {
-              kilometers_per_second: (Math.random() * 30 + 5).toFixed(2),
-              kilometers_per_hour: (Math.random() * 108000 + 18000).toFixed(2),
-              miles_per_hour: (Math.random() * 67000 + 11000).toFixed(2),
-            },
-            miss_distance: {
-              astronomical: (Math.random() * 2 + 0.1).toFixed(8),
-              lunar: (Math.random() * 800 + 40).toFixed(8),
-              kilometers: (Math.random() * 300000000 + 15000000).toFixed(2),
-              miles: (Math.random() * 186000000 + 9300000).toFixed(2),
-            },
-            orbiting_body: 'Earth',
-          },
-        ],
-        is_sentry_object: Math.random() < 0.02, // 2% sentry objects
+  const updateAsteroidsFromCatalog = (entries: Asteroid[], append: boolean) => {
+    asteroids.value = append ? [...asteroids.value, ...entries] : entries
+  }
+
+  const runCatalogSearch = async (query: string, append = false): Promise<Asteroid[]> => {
+    catalogAbort.value?.abort()
+    const controller = new AbortController()
+    catalogAbort.value = controller
+    loading.value = true
+    error.value = null
+
+    try {
+      const result = await fetchCatalogEntries({
+        query,
+        limit: CATALOG_PAGE_SIZE,
+        cursorId: append ? catalogCursor.value : null,
+        signal: controller.signal,
+      })
+
+      catalogQuery.value = query
+      catalogHasMore.value = result.hasMore
+      catalogScanned.value = result.scanned
+
+      const lastEntry = result.entries[result.entries.length - 1]
+      catalogCursor.value = lastEntry ? lastEntry.id : append ? catalogCursor.value : null
+
+      const page = catalogEntriesToAsteroids(result.entries)
+      updateAsteroidsFromCatalog(page, append)
+
+      catalogInitialized.value = true
+      return asteroids.value
+    } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') {
+        return asteroids.value
       }
-      
-      mockDataset.push(asteroid)
+
+      console.warn('Catalog search failed', err)
+      error.value = err instanceof Error ? err.message : 'Catalog search failed'
+      throw err
+    } finally {
+      if (catalogAbort.value === controller) {
+        catalogAbort.value = null
+      }
+      loading.value = false
     }
-    
-    // Add the original mock asteroids too
-    return [...mockAsteroids, ...mockDataset]
+  }
+
+  // NEO Browse API functions
+  const searchAsteroidsNeo = async (query: string): Promise<Asteroid[]> => {
+    loading.value = true
+    error.value = null
+    neoQuery.value = query.trim()
+    neoPage.value = 0
+
+    try {
+      let data;
+      if (neoQuery.value) {
+        // If there's a search query, use search function
+        data = await searchNeos(neoQuery.value, 0, 100)
+      } else {
+        // If no query, just browse normally
+        data = await fetchNeoBrowsePage(0, 100)
+      }
+
+      const items = data.near_earth_objects || []
+      asteroids.value = items.map(mapNeoToAsteroid)
+
+      // Update pagination state based on API response
+      const pageInfo = data.page || {}
+      neoHasMore.value = (pageInfo.number || 0) < (pageInfo.total_pages || 1) - 1
+      neoInitialized.value = true
+
+      console.log('NEO search result:', {
+        query: neoQuery.value,
+        page: pageInfo.number || 0,
+        totalPages: pageInfo.total_pages || 1,
+        hasMore: neoHasMore.value,
+        itemsCount: items.length
+      })
+
+      return asteroids.value
+    } catch (err) {
+      console.error('NEO search failed:', err)
+      error.value = err instanceof Error ? err.message : 'NEO search failed'
+      asteroids.value = []
+      neoHasMore.value = false
+      throw err
+    } finally {
+      loading.value = false
+    }
+  }
+
+  const loadMoreAsteroidsNeo = async (): Promise<Asteroid[]> => {
+    if (!neoHasMore.value || loading.value) {
+      console.log('Load more skipped:', { hasMore: neoHasMore.value, loading: loading.value })
+      return asteroids.value
+    }
+
+    loading.value = true
+
+    try {
+      const nextPage = neoPage.value + 1
+
+      let data;
+      if (neoQuery.value) {
+        // If there's a search query, continue with search
+        data = await searchNeos(neoQuery.value, nextPage, 100)
+      } else {
+        // If no query, just browse the next page
+        data = await fetchNeoBrowsePage(nextPage, 100)
+      }
+
+      const items = data.near_earth_objects || []
+
+      // Append new items (don't replace existing ones)
+      const newAsteroids = items.map(mapNeoToAsteroid)
+      asteroids.value = [...asteroids.value, ...newAsteroids]
+
+      // Update pagination state
+      neoPage.value = nextPage
+      const pageInfo = data.page || {}
+      neoHasMore.value = nextPage < (pageInfo.total_pages || 1) - 1
+
+      console.log('Load more result:', {
+        page: nextPage,
+        totalPages: pageInfo.total_pages || 1,
+        hasMore: neoHasMore.value,
+        newItemsCount: items.length,
+        totalItemsCount: asteroids.value.length
+      })
+
+      return asteroids.value
+    } catch (err) {
+      console.error('Load more NEOs failed:', err)
+      error.value = err instanceof Error ? err.message : 'Failed to load more asteroids'
+      throw err
+    } finally {
+      loading.value = false
+    }
+  }
+
+  /**
+   * Load all remaining data automatically in the background.
+   * This function will recursively fetch all pages until complete.
+   */
+  const loadAllDataInBackground = async (): Promise<void> => {
+    if (isLoadingAll.value || allDataLoaded.value) {
+      return
+    }
+
+    if (isCacheLoaded.value) {
+      asteroids.value = cachedAsteroids.value;
+      allDataLoaded.value = true;
+      neoHasMore.value = false;
+      console.log('Loaded all asteroids from cache.');
+      return;
+    }
+
+    isLoadingAll.value = true
+    console.log('Starting background load of all NEO data...')
+
+
+    try {
+      while (neoHasMore.value) {
+        await loadMoreAsteroidsNeo()
+
+        // Small delay to avoid hammering the API
+        await new Promise(resolve => setTimeout(resolve, 100))
+      }
+
+      allDataLoaded.value = true
+      saveCache(asteroids.value);
+      console.log(`Background load complete! Total asteroids loaded: ${asteroids.value.length}`)
+    } catch (err) {
+      console.error('Background loading failed:', err)
+      // Don't throw - let the user continue with partial data
+    } finally {
+      isLoadingAll.value = false
+    }
+  }
+
+  /**
+   * Wait for all data to be loaded. Use this before search operations.
+   */
+  const waitForAllData = async (): Promise<void> => {
+    if (allDataLoaded.value) {
+      return
+    }
+
+    console.log('Waiting for all data to load...')
+
+    // If background loading hasn't started, start it
+    if (!isLoadingAll.value) {
+      await loadAllDataInBackground()
+    } else {
+      // Wait for existing background load to complete
+      while (isLoadingAll.value) {
+        await new Promise(resolve => setTimeout(resolve, 200))
+      }
+    }
+  }
+
+  // Legacy catalog functions (kept for compatibility)
+  const searchAsteroids = async (query: string): Promise<Asteroid[]> => {
+    // Use NEO browse API instead of catalog
+    return searchAsteroidsNeo(query)
+  }
+
+  const loadMoreAsteroids = async (): Promise<Asteroid[]> => {
+    // Use NEO browse API instead of catalog
+    return loadMoreAsteroidsNeo()
+  }
+
+  const ensureCatalogPrefetched = async () => {
+    if (neoInitialized.value) return
+    try {
+      // Load initial NEO data using the browse endpoint
+      await searchAsteroidsNeo('')
+    } catch (err) {
+      console.debug('NEO preload skipped', err)
+      // Fallback to legacy catalog if NEO fails
+      if (catalogInitialized.value) return
+      try {
+        const result = await preloadCatalog(CATALOG_PAGE_SIZE)
+        if (result?.entries?.length) {
+          const lastEntry = result.entries[result.entries.length - 1]
+          catalogQuery.value = ''
+          catalogHasMore.value = result.hasMore
+          catalogCursor.value = lastEntry ? lastEntry.id : null
+          catalogScanned.value = result.scanned
+          updateAsteroidsFromCatalog(catalogEntriesToAsteroids(result.entries), false)
+          catalogInitialized.value = true
+        }
+      } catch (catalogErr) {
+        console.debug('Catalog preload also failed', catalogErr)
+      }
+    }
   }
 
   const fetchAsteroids = async () => {
@@ -237,43 +421,142 @@ export function useAsteroids() {
     error.value = null
 
     try {
-      // Uncomment this when you have a real API endpoint
-      // const response = await fetch('/api/asteroids')
-      // const data = await response.json()
-      // asteroids.value = data.near_earth_objects || []
+      const start = new Date().toISOString().slice(0, 10)
+      const end = new Date(Date.now() + 86400000).toISOString().slice(0, 10)
 
-      // For now, use large mock dataset with simulated delay
-      await new Promise((resolve) => setTimeout(resolve, 1500))
-      asteroids.value = generateLargeMockDataset()
+  const data = await fetchNeoData(start, end)
+  const root = data as Record<string, unknown> | undefined
+  const grouped = getRecord(root?.['near_earth_objects'])
+      const allItems = flattenNearEarthObjects(grouped)
+
+      asteroids.value = allItems.map(mapNeoToAsteroid)
     } catch (err) {
-      error.value = err instanceof Error ? err.message : 'Failed to fetch asteroids'
       console.error('Error fetching asteroids:', err)
+      error.value = err instanceof Error ? err.message : 'Failed to fetch asteroids'
+      asteroids.value = []
     } finally {
       loading.value = false
     }
   }
 
-  const getAsteroidById = (id: string): Asteroid | undefined => {
-    return asteroids.value.find((asteroid) => asteroid.id === id)
-  }
+  const detailsCache = new Map<string, Asteroid>()
 
-  const searchAsteroids = (query: string): Asteroid[] => {
-    if (!query.trim()) return asteroids.value
+  const fetchDetailsForId = async (id: string): Promise<Asteroid | undefined> => {
+    if (!id) return undefined
+    if (detailsCache.has(id)) return detailsCache.get(id)
 
-    const lowercaseQuery = query.toLowerCase()
-    return asteroids.value.filter(
-      (asteroid) =>
-        asteroid.name.toLowerCase().includes(lowercaseQuery) ||
-        asteroid.id.includes(lowercaseQuery),
-    )
+    try {
+      const sbdbRaw = (await fetchSmallBodyData(id)) as SbdbResponse
+      const objectRecord = getRecord(sbdbRaw.object) ?? getRecord(sbdbRaw)
+      const orbitRecord = getRecord(sbdbRaw.orbit)
+      const physPar = toPhysicalParams(sbdbRaw.phys_par)
+
+      const name =
+        (objectRecord &&
+          (asString(objectRecord['full_name'])
+            || asString(objectRecord['fullname'])
+            || asString(objectRecord['designation'])))
+        || `ID ${id}`
+
+      const diameterKm = toNumber(objectRecord?.['diameter_km'], Number.NaN)
+      const estimatedDiameter: EstimatedDiameter = Number.isNaN(diameterKm)
+        ? {}
+        : {
+            kilometers: {
+              estimated_diameter_min: diameterKm * 0.9,
+              estimated_diameter_max: diameterKm * 1.1,
+            },
+          }
+
+      const asteroid: Asteroid = {
+        links: { self: asString(objectRecord?.['self']) },
+        id,
+        neo_reference_id: id,
+        name,
+        nasa_jpl_url: asString(objectRecord?.['spk_url']) || asString(objectRecord?.['jpl_url']),
+        absolute_magnitude_h: toNumber(objectRecord?.['H'], 0),
+        estimated_diameter: estimatedDiameter,
+        is_potentially_hazardous_asteroid: asBoolean(
+          objectRecord?.['is_potentially_hazardous_asteroid'],
+          false,
+        ),
+        close_approach_data: [],
+        is_sentry_object: false,
+        tholen_spectral_type: asString(extractPhysParam(physPar, 'spec_T')) || undefined,
+        smassii_spectral_type: asString(extractPhysParam(physPar, 'spec_B')) || undefined,
+        diameter_km: (() => {
+          const value = extractPhysParam(physPar, 'diameter')
+          const numeric = toNumber(value, Number.NaN)
+          return Number.isNaN(numeric) ? undefined : numeric
+        })(),
+        geometric_albedo: (() => {
+          const value = extractPhysParam(physPar, 'albedo')
+          const numeric = toNumber(value, Number.NaN)
+          return Number.isNaN(numeric) ? undefined : numeric
+        })(),
+      }
+
+      detailsCache.set(id, asteroid)
+
+      const orbitClass = asString(orbitRecord?.['class'])
+      const isNeoCandidate =
+        asBoolean(objectRecord?.['is_neo'], false) ||
+        asBoolean(objectRecord?.['is_potentially_hazardous_asteroid'], false) ||
+        /near/i.test(orbitClass)
+
+      if (isNeoCandidate) {
+        try {
+          const neoResp = await fetchNeoDetails(id)
+          const mapped = mapNeoToAsteroid(neoResp as NeoApiObject)
+          const mergedDiameter = Object.keys(mapped.estimated_diameter || {}).length > 0
+            ? mapped.estimated_diameter
+            : asteroid.estimated_diameter
+
+          const enriched: Asteroid = {
+            ...asteroid,
+            ...mapped,
+            estimated_diameter: mergedDiameter,
+            absolute_magnitude_h: mapped.absolute_magnitude_h || asteroid.absolute_magnitude_h,
+          }
+
+          detailsCache.set(id, enriched)
+          return enriched
+        } catch (neoError) {
+          console.debug('No NEO details available for', id, neoError)
+        }
+      }
+
+      return asteroid
+    } catch (sbdbError) {
+      console.warn('SBDB lookup failed for', id, sbdbError)
+      return undefined
+    }
   }
 
   return {
     asteroids,
     loading,
     error,
+    // NEO browse state
+    neoPage,
+    neoHasMore,
+    neoQuery,
+    neoInitialized,
+    isLoadingAll,
+    allDataLoaded,
+    // Legacy catalog state (for compatibility)
+    catalogQuery,
+    catalogHasMore,
+    catalogScanned,
+    // Functions
     fetchAsteroids,
-    getAsteroidById,
     searchAsteroids,
+    loadMoreAsteroids,
+    searchAsteroidsNeo,
+    loadMoreAsteroidsNeo,
+    loadAllDataInBackground,
+    waitForAllData,
+    fetchDetailsForId,
+    ensureCatalogPrefetched,
   }
 }

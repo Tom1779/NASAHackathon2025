@@ -1,0 +1,245 @@
+<template>
+  <div v-if="selectedAsteroid" class="mt-8">
+    <Card class="bg-gradient-to-br from-yellow-900/50 to-orange-900/50 border border-yellow-500/40 shadow-2xl overflow-hidden">
+      <template #title>
+        <div class="flex items-center gap-3 text-white py-2">
+          <div class="p-2 bg-yellow-500/20 rounded-full">
+            <i class="pi pi-dollar text-yellow-400 text-lg"></i>
+          </div>
+          <div>
+            <h2 class="text-2xl font-bold text-white">Estimated Worth</h2>
+            <p class="text-yellow-200/80 text-sm">Economic analysis using Asterank methodology</p>
+          </div>
+        </div>
+      </template>
+      <template #content>
+        <div class="space-y-8">
+          <!-- Key Metrics Cards -->
+          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <!-- Total Value Card -->
+            <div class="bg-gradient-to-br from-green-900/40 to-green-800/40 p-6 rounded-xl border border-green-500/30 hover:border-green-400/50 transition-all duration-300 shadow-lg">
+              <div class="flex items-center gap-3 mb-3">
+                <div class="p-2 bg-green-500/20 rounded-lg">
+                  <i class="pi pi-wallet text-green-400 text-lg"></i>
+                </div>
+                <div class="text-green-400 text-sm font-medium uppercase tracking-wide">Total Value</div>
+              </div>
+              <div class="text-white text-2xl font-bold font-mono">{{ calculations?.formatValue(calculations.asterankPrice.value) || '$0' }}</div>
+              <div class="text-green-300/70 text-xs mt-1">Market-based valuation</div>
+            </div>
+
+            <!-- Accessibility Card -->
+            <div class="bg-gradient-to-br from-blue-900/40 to-blue-800/40 p-6 rounded-xl border border-blue-500/30 hover:border-blue-400/50 transition-all duration-300 shadow-lg">
+              <div class="flex items-center gap-3 mb-3">
+                <div class="p-2 bg-blue-500/20 rounded-lg">
+                  <i class="pi pi-compass text-blue-400 text-lg"></i>
+                </div>
+                <div class="text-blue-400 text-sm font-medium uppercase tracking-wide">Accessibility</div>
+              </div>
+              <div class="text-white text-2xl font-bold font-mono">{{ calculations?.closenessWeight.value.toFixed(1) || '0' }}</div>
+              <div class="text-blue-300/70 text-xs mt-1">Mission difficulty score</div>
+            </div>
+
+            <!-- Profit Potential Card -->
+            <div class="bg-gradient-to-br from-purple-900/40 to-purple-800/40 p-6 rounded-xl border border-purple-500/30 hover:border-purple-400/50 transition-all duration-300 shadow-lg">
+              <div class="flex items-center gap-3 mb-3">
+                <div class="p-2 bg-purple-500/20 rounded-lg">
+                  <i class="pi pi-chart-line text-purple-400 text-lg"></i>
+                </div>
+                <div class="text-purple-400 text-sm font-medium uppercase tracking-wide">Est. Profit</div>
+              </div>
+              <div class="text-2xl font-bold font-mono" 
+                   :class="{ 'text-green-400': (calculations?.asterankProfitValue?.value || 0) > 0, 'text-red-400': (calculations?.asterankProfitValue?.value || 0) <= 0 }">
+                {{ calculations?.formatValue(calculations.asterankProfitValue?.value || 0) || '$0' }}
+              </div>
+              <div class="text-purple-300/70 text-xs mt-1">Risk-adjusted returns</div>
+            </div>
+
+            <!-- Asterank Score Card -->
+            <div class="bg-gradient-to-br from-amber-900/40 to-yellow-800/40 p-6 rounded-xl border border-amber-500/30 hover:border-amber-400/50 transition-all duration-300 shadow-lg">
+              <div class="flex items-center gap-3 mb-3">
+                <div class="p-2 bg-amber-500/20 rounded-lg">
+                  <i class="pi pi-star text-amber-400 text-lg"></i>
+                </div>
+                <div class="text-amber-400 text-sm font-medium uppercase tracking-wide">Ranking Score</div>
+              </div>
+              <div class="text-white text-2xl font-bold font-mono">{{ calculations?.asterankScore.value.toExponential(2) || '0' }}</div>
+              <div class="text-amber-300/70 text-xs mt-1">Asterank methodology</div>
+            </div>
+          </div>
+
+          <!-- Extractable Materials -->
+          <div class="bg-gradient-to-r from-indigo-900/40 to-purple-900/40 p-6 rounded-xl border border-indigo-500/30">
+            <div class="flex items-center gap-3 mb-6">
+              <div class="p-2 bg-indigo-500/20 rounded-lg">
+                <i class="pi pi-th-large text-indigo-400 text-lg"></i>
+              </div>
+              <h3 class="text-white text-xl font-bold">Extractable Materials</h3>
+            </div>
+            <div v-if="calculations?.materials.value && calculations.materials.value.length > 0" class="space-y-4">
+              <div 
+                v-for="material in calculations.materials.value" 
+                :key="material?.material || Math.random()"
+                class="bg-black/20 p-4 rounded-lg border border-gray-600/20 hover:border-gray-500/30 transition-all duration-200"
+              >
+                <div class="flex justify-between items-start">
+                  <div class="flex items-center gap-4 flex-1">
+                    <!-- Profitability Indicator -->
+                    <div class="flex flex-col items-center gap-1">
+                      <div class="w-4 h-4 rounded-full border-2" 
+                           :class="{
+                             'bg-green-400 border-green-400 shadow-lg shadow-green-400/30': (material?.netProfit || 0) > 0,
+                             'bg-yellow-400 border-yellow-400 shadow-lg shadow-yellow-400/30': (material?.netProfit || 0) === 0,
+                             'bg-red-400 border-red-400 shadow-lg shadow-red-400/30': (material?.netProfit || 0) < 0
+                           }"></div>
+                    </div>
+                    
+                    <!-- Material Info -->
+                    <div class="flex-1">
+                      <div class="flex items-center gap-3 mb-2">
+                        <span class="text-white font-semibold text-lg">{{ material?.info?.name || 'Unknown Material' }}</span>
+                        <div class="px-2 py-1 bg-purple-500/20 rounded-md">
+                          <span class="text-purple-300 text-sm font-mono font-medium">{{ formatPercentage(material?.percentage || 0) }}%</span>
+                        </div>
+                      </div>
+                      <div class="text-gray-400 text-sm">
+                        <span class="font-mono">{{ calculations.formatMass(material?.mass || 0) }}</span>
+                        <span class="mx-2">•</span>
+                        <span>${{ (material?.pricePerKg || 0).toLocaleString() }}/kg</span>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <!-- Profit Display -->
+                  <div class="text-right">
+                    <div class="text-lg font-bold font-mono" 
+                         :class="{
+                           'text-green-400': (material?.netProfit || 0) > 0,
+                           'text-yellow-400': (material?.netProfit || 0) === 0,
+                           'text-red-400': (material?.netProfit || 0) < 0
+                         }">
+                      {{ (material?.netProfit || 0) > 0 ? '+' : '' }}{{ calculations.formatValue(material?.netProfit || 0) }}
+                    </div>
+                    <div class="text-gray-400 text-xs mt-1">
+                      {{ (material?.netProfit || 0) > 0 ? 'Profitable' : (material?.netProfit || 0) === 0 ? 'Break Even' : 'Loss' }}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div v-else class="text-center py-8">
+              <div class="text-gray-400 text-lg mb-2">
+                <i class="pi pi-search text-4xl mb-4 block"></i>
+                No material data available
+              </div>
+              <p class="text-gray-500 text-sm">Composition analysis requires spectral classification data</p>
+            </div>
+          </div>
+
+          <!-- Market Prices Reference -->
+          <div class="bg-gradient-to-r from-emerald-900/40 to-teal-900/40 p-6 rounded-xl border border-emerald-500/30">
+            <div class="flex items-center gap-3 mb-6">
+              <div class="p-2 bg-emerald-500/20 rounded-lg">
+                <i class="pi pi-shopping-cart text-emerald-400 text-lg"></i>
+              </div>
+              <div>
+                <h3 class="text-white text-xl font-bold">Current Market Prices</h3>
+                <p class="text-emerald-200/80 text-sm">October 4, 2025 • Space delivery costs included</p>
+              </div>
+            </div>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <!-- Precious Metals -->
+              <div class="bg-black/20 p-4 rounded-lg border border-gray-600/20">
+                <h4 class="text-emerald-400 text-sm font-medium mb-3 uppercase tracking-wide">Precious Metals</h4>
+                <div class="space-y-2 text-sm">
+                  <div class="flex justify-between">
+                    <span class="text-gray-300">Gold</span>
+                    <span class="text-white font-mono font-medium">$124,800/kg</span>
+                  </div>
+                  <div class="flex justify-between">
+                    <span class="text-gray-300">Platinum</span>
+                    <span class="text-white font-mono font-medium">$51,600/kg</span>
+                  </div>
+                </div>
+              </div>
+              
+              <!-- Industrial Metals -->
+              <div class="bg-black/20 p-4 rounded-lg border border-gray-600/20">
+                <h4 class="text-emerald-400 text-sm font-medium mb-3 uppercase tracking-wide">Industrial Metals</h4>
+                <div class="space-y-2 text-sm">
+                  <div class="flex justify-between">
+                    <span class="text-gray-300">Cobalt</span>
+                    <span class="text-white font-mono font-medium">$92.4/kg</span>
+                  </div>
+                  <div class="flex justify-between">
+                    <span class="text-gray-300">Nickel</span>
+                    <span class="text-white font-mono font-medium">$35.2/kg</span>
+                  </div>
+                  <div class="flex justify-between">
+                    <span class="text-gray-300">Iron</span>
+                    <span class="text-white font-mono font-medium">$0.57/kg</span>
+                  </div>
+                </div>
+              </div>
+              
+              <!-- Space Resources -->
+              <div class="bg-black/20 p-4 rounded-lg border border-gray-600/20">
+                <h4 class="text-emerald-400 text-sm font-medium mb-3 uppercase tracking-wide">Space Resources</h4>
+                <div class="space-y-2 text-sm">
+                  <div class="flex justify-between">
+                    <span class="text-gray-300">Water</span>
+                    <span class="text-white font-mono font-medium">$22/kg</span>
+                  </div>
+                  <div class="flex justify-between">
+                    <span class="text-gray-300">Hydrogen</span>
+                    <span class="text-white font-mono font-medium">$5/kg</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </template>
+    </Card>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { computed } from 'vue'
+import Card from 'primevue/card'
+import type { Asteroid } from '../types/asteroid'
+import { useComposition } from '../composables/useComposition'
+import { useAsteroidCalculations } from '../composables/useAsteroidCalculations'
+import { useAsteroids } from '../composables/useAsteroids'
+
+// Get selected asteroid
+const { selectedAsteroid } = useAsteroids()
+
+// Get composition and calculation data for the selected asteroid
+const composition = computed(() => {
+  if (!selectedAsteroid.value) return null
+  return useComposition(selectedAsteroid.value)
+})
+
+const calculations = computed(() => {
+  if (!selectedAsteroid.value) return null
+  return useAsteroidCalculations(selectedAsteroid.value)
+})
+
+// Format percentage with appropriate precision for small values
+const formatPercentage = (percentage: string | number): string => {
+  const num = typeof percentage === 'string' ? parseFloat(percentage) : percentage
+  if (isNaN(num) || num === 0) return '0'
+  if (num >= 1) {
+    return num.toFixed(1)
+  } else if (num >= 0.1) {
+    return num.toFixed(2)
+  } else if (num >= 0.01) {
+    return num.toFixed(3)
+  } else if (num > 0) {
+    return num.toFixed(4)
+  }
+  return '0'
+}
+</script>
