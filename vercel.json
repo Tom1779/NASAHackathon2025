@@ -1,0 +1,20 @@
+{
+  "rewrites": [
+    {
+      "source": "/api/sbdb",
+      "destination": "https://ssd-api.jpl.nasa.gov/sbdb.api"
+    },
+    {
+      "source": "/api/sbdb/:path*",
+      "destination": "https://ssd-api.jpl.nasa.gov/sbdb.api"
+    },
+    {
+      "source": "/api/neo",
+      "destination": "https://ssd-api.jpl.nasa.gov/neo.api"
+    },
+    {
+      "source": "/api/neo/:path*",
+      "destination": "https://ssd-api.jpl.nasa.gov/neo.api"
+    }
+  ]
+}
