@@ -10,6 +10,28 @@
       </template>
       <template #content>
         <div class="space-y-4">
+        
+        <!-- Loading Progress Bar (NEW) -->
+        <div v-if="props.isLoadingAll" class="loading-section">
+          <div class="text-purple-300 text-sm mb-2 flex items-center gap-2">
+            <i class="pi pi-spin pi-spinner"></i>
+            <span>Loading asteroid database...</span>
+          </div>
+          <div class="w-full bg-purple-950/50 rounded-full h-3 overflow-hidden border border-purple-500/30">
+            <div 
+              class="bg-gradient-to-r from-purple-500 to-pink-500 h-full transition-all duration-300 ease-out flex items-center justify-end pr-2"
+              :style="{ width: `${loadingProgress}%` }"
+            >
+              <span class="text-xs text-white font-semibold drop-shadow-lg" v-if="loadingProgress > 15">
+                {{ loadingProgress }}%
+              </span>
+            </div>
+          </div>
+          <div class="text-xs text-purple-400 mt-1 text-center">
+            {{ loadingStatusText }}
+          </div>
+        </div>
+
         <!-- Search Input -->
         <div>
           <label class="block text-purple-300 mb-2 text-sm font-medium">
@@ -18,6 +40,7 @@
           <InputText
             v-model="searchQuery"
             :placeholder="selectedAsteroid ? `Selected: ${selectedAsteroid.name}` : 'Type asteroid name or ID...'"
+            :disabled="props.isLoadingAll"
             class="w-full"
             @input="onSearchInput"
             @focus="onSearchFocus"
@@ -32,6 +55,7 @@
             <Select
               v-model="filters.hazardous"
               :options="hazardousOptions"
+              :disabled="props.isLoadingAll"
               optionLabel="label"
               optionValue="value"
               placeholder="All"
@@ -44,6 +68,7 @@
             <Select
               v-model="filters.sizeRange"
               :options="sizeRangeOptions"
+              :disabled="props.isLoadingAll"
               optionLabel="label"
               optionValue="value"
               placeholder="Any size"
@@ -56,6 +81,7 @@
             <Select
               v-model="filters.sortBy"
               :options="sortOptions"
+              :disabled="props.isLoadingAll"
               optionLabel="label"
               optionValue="value"
               placeholder="Name"
@@ -67,7 +93,7 @@
 
         <!-- Search Results -->
         <div
-          v-if="shouldShowDropdown"
+          v-if="shouldShowDropdown && props.allDataLoaded"
           class="search-results-dropdown max-h-96 overflow-y-auto border border-purple-500/30 rounded-lg relative z-10"
           @click.stop
           @mousedown="keepDropdownOpen"
@@ -170,8 +196,8 @@
               <div v-if="totalPages > 1" class="pagination-controls flex justify-between items-center mb-2">
                 <Button
                   :disabled="currentPage === 1"
-                  @click="goToPage(currentPage - 1); keepDropdownOpen()"
-                  @mousedown="keepDropdownOpen"
+                  @click="handlePrevPage"
+                  @mousedown.prevent="keepDropdownOpen"
                   size="small"
                   severity="secondary"
                   outlined
@@ -188,8 +214,8 @@
                 </span>
                 <Button
                   :disabled="currentPage === totalPages"
-                  @click="goToPage(currentPage + 1); keepDropdownOpen()"
-                  @mousedown="keepDropdownOpen"
+                  @click="handleNextPage"
+                  @mousedown.prevent="keepDropdownOpen"
                   size="small"
                   severity="secondary"
                   outlined
@@ -205,17 +231,13 @@
                   <i class="pi pi-check-circle mr-1"></i>
                   Searching {{ props.asteroids.length }} asteroids
                 </div>
-                <div v-else-if="props.isLoadingAll" class="text-purple-300">
-                  <i class="pi pi-spin pi-spinner mr-2"></i>
-                  Loading asteroid database...
-                </div>
               </div>
             </div>
           </div>
         </div>
 
         <!-- Quick Access / Recent Selections -->
-        <div v-if="!isSearchFocused && !searchQuery && !hasFilters">
+        <div v-if="!isSearchFocused && !searchQuery && !hasFilters && props.allDataLoaded">
           <div class="text-sm text-purple-300 mb-2">Quick Access:</div>
           <div class="grid grid-cols-2 gap-2">
             <Button
@@ -269,7 +291,7 @@
 
         <!-- Action Button -->
         <Button
-          :disabled="!selectedAsteroid"
+          :disabled="!selectedAsteroid || props.isLoadingAll"
           @click="handleAnalyze"
           class="w-full"
           severity="secondary"
@@ -300,6 +322,8 @@ interface Props {
   isLoadingAll?: boolean
   allDataLoaded?: boolean
   fetchDetailsForId?: (id: string) => Promise<Asteroid | undefined>
+  loadingProgress?: number
+  loadingStatusText?: string
 }
 
 interface Emits {
@@ -308,7 +332,10 @@ interface Emits {
   (e: 'search', query: string): void
 }
 
-const props = defineProps<Props>()
+const props = withDefaults(defineProps<Props>(), {
+  loadingProgress: 0,
+  loadingStatusText: 'Initializing...'
+})
 const emit = defineEmits<Emits>()
 
 // Search and filter state
@@ -358,7 +385,12 @@ const hasFilters = computed(() => {
 })
 
 const shouldShowDropdown = computed(() => {
-  return showDropdown.value || isSearchFocused.value || searchQuery.value || hasFilters.value
+  // Show dropdown when: focused, has search query, has filters, OR data is loaded and no selection yet
+  return showDropdown.value || 
+         isSearchFocused.value || 
+         searchQuery.value || 
+         hasFilters.value ||
+         (props.allDataLoaded && !props.selectedAsteroid && !props.isLoadingAll)
 })
 
 const filteredAsteroids = computed(() => {
@@ -537,6 +569,20 @@ const applyFilters = () => {
   currentPage.value = 1
 }
 
+const goToPage = (page: number) => {
+  currentPage.value = page
+}
+
+const handlePrevPage = () => {
+  goToPage(currentPage.value - 1)
+  keepDropdownOpen()
+}
+
+const handleNextPage = () => {
+  goToPage(currentPage.value + 1)
+  keepDropdownOpen()
+}
+
 const handleClickOutside = (event: MouseEvent) => {
   const target = event.target as HTMLElement
 
@@ -565,7 +611,6 @@ onUnmounted(() => {
   }
 })
 
-// UPDATED: Fetch details when asteroid is selected
 const selectAsteroid = async (asteroid: Asteroid) => {
   emit('update:selectedAsteroid', asteroid)
   searchQuery.value = ''
@@ -581,7 +626,6 @@ const selectAsteroid = async (asteroid: Asteroid) => {
     behavior: 'smooth'
   })
 
-  // Fetch detailed data (spectral types, etc.) if not already present
   if (props.fetchDetailsForId && !asteroid.tholen_spectral_type && !asteroid.smassii_spectral_type) {
     fetchingDetails.value = true
     console.log(`🔍 Fetching detailed data for ${asteroid.name}...`)
@@ -621,11 +665,6 @@ const showHazardousOnly = () => {
   applyFilters()
 }
 
-const goToPage = (page: number) => {
-  currentPage.value = page
-}
-
-// Watch for filter changes to reset pagination
 watch([filters, searchQuery], () => {
   currentPage.value = 1
 }, { deep: true })
@@ -636,7 +675,6 @@ watch(() => props.loadingAsteroids, (isLoading) => {
 </script>
 
 <style scoped>
-/* Force cursor and selection behavior for result items */
 .asteroid-result-item {
   cursor: pointer !important;
   user-select: none !important;
@@ -657,8 +695,14 @@ watch(() => props.loadingAsteroids, (isLoading) => {
   cursor: pointer !important;
 }
 
-/* Purple highlight on hover */
 .asteroid-result-item:hover .asteroid-name {
-  color: rgb(216, 180, 254) !important; /* purple-300 */
+  color: rgb(216, 180, 254) !important;
+}
+
+.loading-section {
+  background: linear-gradient(135deg, rgba(88, 28, 135, 0.1) 0%, rgba(139, 92, 246, 0.1) 100%);
+  border: 1px solid rgba(168, 85, 247, 0.3);
+  border-radius: 0.5rem;
+  padding: 1rem;
 }
 </style>

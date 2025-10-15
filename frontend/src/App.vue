@@ -18,6 +18,8 @@
             :loading-asteroids="loadingAsteroids"
             :is-loading-all="isLoadingAll"
             :all-data-loaded="allDataLoaded"
+            :loading-progress="loadingProgress"
+            :loading-status-text="loadingStatusText"
             :fetch-details-for-id="fetchDetailsForId"
             @update:selected-asteroid="onSelectAsteroid"
             @analyze="onAnalyzeAsteroid"
@@ -65,6 +67,8 @@ const {
   loading: loadingAsteroids,
   isLoadingAll,
   allDataLoaded,
+  loadingProgress,
+  loadingStatusText,
   searchAsteroids,
   loadAllAsteroidsFromJson,
   fetchDetailsForId,
@@ -104,7 +108,7 @@ onMounted(async () => {
 // Handle asteroid selection - simplified
 const onSelectAsteroid = async (asteroid: Asteroid | null) => {
   selectedAsteroid.value = asteroid
-  
+
   // The AsteroidSelector component will handle fetching details
   // We just need to update our selectedAsteroid ref when it does
 }
